@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 环境变量（含密钥，禁止提交）
+.env
+
+# 数据文件（SQLite 检查点等）
+data/
+
+# Node
+node_modules/
+dist/
+
+# 测试产物
+.playwright-cli/
+output/
+
+# IDE
+.idea/
+
+# 日志
+*.log

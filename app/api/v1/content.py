@@ -1,0 +1,179 @@
+"""
+内容创作接口：选题 / SSE 流式生成 / 历史记录
+
+【SSE 是什么？】
+SSE = Server-Sent Events（服务器推送事件）。
+前端用 EventSource 建立一条"长连接"，服务器可以持续往这条连接推数据。
+和 WebSocket 的区别：SSE 是单向的（服务器 → 客户端），
+正好适合"AI 生成进度实时展示"这种场景——服务器一直推，前端一直渲染。
+
+【SSE 响应格式】
+Content-Type: text/event-stream
+每个事件是：
+    event: <事件名>
+    data: <JSON字符串>
+
+    事件之间用空行分隔。
+
+【前端如何调用（伪代码）】
+const es = new EventSource(`/api/v1/content/generate?token=${token}`);
+es.addEventListener('progress', e => 更新进度条(JSON.parse(e.data)));
+es.addEventListener('content', e => 追加文字(JSON.parse(e.data)));
+es.addEventListener('complete', e => 展示最终结果(JSON.parse(e.data)));
+
+【为什么 generate 用 GET + token 参数而不是 POST + Authorization 头？】
+EventSource 这个浏览器 API 无法自定义请求头！
+所以前端要么把 token 放 URL 参数（本方案，简单），
+要么用 fetch 流式读取（更标准但实现复杂）。
+MVP 阶段用 URL 参数方案，注意生产环境必须配 HTTPS 防止 token 泄露。
+"""
+
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
+from app.db.session import get_db
+from app.models.user import User
+from app.schemas.content import CreateRequest, TaskOut, TopicsOut
+from app.services import content_service
+
+router = APIRouter(prefix="/api/v1/content", tags=["内容创作"])
+
+
+@router.post("/topics", response_model=TopicsOut, summary="生成爆款选题")
+def generate_topics(
+    data: CreateRequest,  # 前端传 keyword + platform
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # 需要登录
+):
+    """
+    第一步：根据关键词生成 5 个爆款选题。
+
+    【为什么选题是普通接口而不是 SSE？】
+    选题只有 5 个，一次性返回即可，不需要实时进度。
+    前端拿到列表后展示给用户，用户点选一个再触发"完整创作"。
+    """
+    data.validate_platform()  # 校验平台是否支持
+    result = content_service.get_topics(data.keyword, data.platform)
+    if not result["topics"]:
+        # 模型解析失败等异常情况：给前端明确提示而不是空列表
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,  # 502：上游（AI）出错
+            detail="选题生成失败，请稍后重试",
+        )
+    return result
+
+
+@router.get("/generate", summary="完整创作（SSE 流式）")
+def generate(
+    keyword: str = Query(..., min_length=1, max_length=200, description="主题/关键词"),
+    platform: str = Query(..., description="目标平台"),
+    selected_title: str = Query(..., description="用户选择的选题标题"),
+    token: str = Query(..., description="JWT 令牌（EventSource 无法带请求头，用 URL 参数）"),
+    db: Session = Depends(get_db),
+):
+    """
+    第二步：用户选好选题后，流式生成完整爆文。
+
+    【为什么这里手动校验 token 而不是 Depends(get_current_user)？】
+    EventSource 无法自定义请求头（Authorization），token 只能放 URL 参数，
+    而 Depends 依赖只能从"请求头"读取。所以这里手动：
+    1. 用 token 参数解析出用户身份（复用 deps.py 的校验函数）
+    2. 解析失败 → 直接返回 401
+    """
+    # 复用认证逻辑：通过 token 参数解析出当前用户
+    from app.api.deps import get_current_user
+
+    # 由于 get_current_user 依赖请求头，这里用一个轻量包装：
+    # 手动构造"只有 token"的认证对象
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer", credentials=token
+    )
+    # 这里利用 FastAPI 的依赖系统：手动调用 get_current_user
+    # （把 credentials 和 db 都显式传入）
+    try:
+        current_user = get_current_user(credentials=credentials, db=db)
+    except HTTPException as exc:
+        # 认证失败：返回和普通接口一致的 401 响应
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail,
+        )
+
+    # 校验平台 + 手动构造完整请求对象（get_topics 需要）
+    req = CreateRequest(
+        keyword=keyword, platform=platform, selected_title=selected_title
+    )
+    req.validate_platform()
+
+    # 先取一次选题列表（确保 topic 有完整信息：标题/简介/目标人群）
+    topics_result = content_service.get_topics(keyword, platform)
+    topics = topics_result["topics"]
+    if not topics:
+        raise HTTPException(status_code=502, detail="选题生成失败，请重试")
+
+    # ---------- 构造 SSE 流式响应 ----------
+    def event_stream():
+        """
+        生成器：把 content_service.stream_generate 的产出
+        转换成标准 SSE 格式（event: 事件名 + data: JSON + 空行）。
+        """
+        for item in content_service.stream_generate(
+            db=db,
+            user_id=current_user.id,
+            keyword=keyword,
+            platform=platform,
+            selected_title=selected_title,
+            topics=topics,
+        ):
+            event = item["event"]
+            data = item["data"]
+            # SSE 协议格式：event 行 + data 行 + 空行（用两个 \n 分隔）
+            yield f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    # StreamingResponse：FastAPI 提供流式响应，直到生成器结束才断开连接
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",  # SSE 的标准媒体类型
+        headers={
+            # 禁用缓存：流式数据必须实时，不能走浏览器缓存
+            "Cache-Control": "no-cache",
+            # 不缓冲：让每段数据立即推送到前端（Nginx 等代理也需要配这个）
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/tasks", response_model=list[TaskOut], summary="历史记录列表")
+def task_list(
+    limit: int = Query(default=20, ge=1, le=100, description="返回条数"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """查看当前用户的生成历史（最新在前）。"""
+    tasks = content_service.get_task_list(db, current_user.id, limit)
+    return tasks
+
+
+@router.get("/tasks/{task_id}", response_model=TaskOut, summary="历史记录详情")
+def task_detail(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    查看单条生成记录详情。
+    get_task_detail 内部做了 user_id 匹配，别人看不了你的记录。
+    """
+    task = content_service.get_task_detail(db, current_user.id, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,  # 404：记录不存在
+            detail="记录不存在",
+        )
+    return task

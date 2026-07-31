@@ -1,0 +1,80 @@
+### 测试 AI 爆文智能创作平台 - 用户管理模块
+
+### 服务健康检查
+GET http://127.0.0.1:8001/
+Accept: application/json
+
+### 注册
+POST http://127.0.0.1:8001/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "phone": "13800138000",
+  "password": "test123456",
+  "nickname": "小美"
+}
+
+### 登录
+POST http://127.0.0.1:8001/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "account": "13800138000",
+  "password": "test123456"
+}
+
+### 获取当前用户信息（需替换 TOKEN）
+GET http://127.0.0.1:8001/api/v1/auth/me
+Authorization: Bearer <TOKEN>
+
+### 修改个人信息
+PUT http://127.0.0.1:8001/api/v1/user/profile
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+
+{
+  "nickname": "小红书美妆博主小美",
+  "bio": "3万粉丝美妆博主，专注干货分享"
+}
+
+### 修改密码
+PUT http://127.0.0.1:8001/api/v1/user/password
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+
+{
+  "old_password": "test123456",
+  "new_password": "newpass888"
+}
+
+### 登出
+POST http://127.0.0.1:8001/api/v1/auth/logout
+Authorization: Bearer <TOKEN>
+
+### 注销账号
+DELETE http://127.0.0.1:8001/api/v1/user/account
+Authorization: Bearer <TOKEN>
+
+### ============ 内容创作模块 ============
+
+### 生成爆款选题（需登录）
+POST http://127.0.0.1:8001/api/v1/content/topics
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+
+{
+  "keyword": "AI工具提升效率",
+  "platform": "小红书"
+}
+
+### SSE 流式创作（浏览器/EventSource 使用，用 URL 传 token）
+# 注意：此接口返回 text/event-stream，REST Client 无法直接友好展示，建议用浏览器测试
+GET http://127.0.0.1:8001/api/v1/content/generate?keyword=AI工具提升效率&platform=小红书&selected_title=打工人偷偷用的AI工具&token=<TOKEN>
+
+### 历史记录列表
+GET http://127.0.0.1:8001/api/v1/content/tasks
+Authorization: Bearer <TOKEN>
+
+### 历史记录详情
+GET http://127.0.0.1:8001/api/v1/content/tasks/1
+Authorization: Bearer <TOKEN>
