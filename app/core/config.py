@@ -83,6 +83,19 @@ class Settings(BaseSettings):
     # 文本生成模型名称（通义千问系列）
     DASHSCOPE_MODEL: str = "deepseek-v4-flash"
 
+    # ---------- 通义万相（图像生成）配置 ----------
+    # 图像生成模型（wanx2.1-t2i-turbo：快速版，成本低；wan2.7-image-pro 质量更高）
+    DASHSCOPE_IMAGE_MODEL: str = "wan2.7-image-pro"
+    # 生成图片的尺寸规格（通义万相格式：宽*高，支持 1024*1024 / 720*1280 / 1280*720）
+    DASHSCOPE_IMAGE_SIZE: str = "1024*1024"
+
+    # ---------- 图片本地存储配置 ----------
+    # 图片保存目录（相对项目根目录，运行时解析为绝对路径）
+    # 注意：这个目录应加入 .gitignore（data/ 已忽略），生产环境可挂载到独立磁盘
+    IMAGE_STORAGE_DIR: str = "data/images"
+    # 图片对外访问的 URL 前缀（静态资源挂载路径）
+    IMAGE_URL_PREFIX: str = "/images"
+
 
 # 创建唯一的配置实例，其他模块通过 `from app.core.config import settings` 使用
 # 整个项目共用这一个对象，保证配置读取一次、处处一致
