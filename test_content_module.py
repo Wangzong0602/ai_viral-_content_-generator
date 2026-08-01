@@ -59,7 +59,8 @@ def parse_sse(text: str) -> list[dict]:
 
 def test():
     # ---------- 1. 注册用户 ----------
-    phone = f"138{int(time.time()) % 100000000:08d}"
+    # 统一使用 199 测试号段（清理时只删该号段，绝不触碰真实账号）
+    phone = f"199{int(time.time()) % 100000000:08d}"
     r = requests.post(
         f"{BASE}/api/v1/auth/register",
         json={"phone": phone, "password": "pass123456"},
