@@ -7,6 +7,7 @@
         <span class="logo">✍️ AI 爆文智能创作平台</span>
         <el-menu mode="horizontal" :default-active="route.path" router :ellipsis="false" class="nav-menu">
           <el-menu-item index="/">创作工作台</el-menu-item>
+          <el-menu-item index="/batch">批量生成</el-menu-item>
           <el-menu-item index="/history">历史记录</el-menu-item>
         </el-menu>
       </div>
