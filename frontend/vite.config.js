@@ -9,11 +9,16 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     host: '127.0.0.1', // 显式绑定 IPv4，避免系统 IPv6 监听权限问题
-    port: 5454, // 5173 在系统端口排除范围内无法绑定，改用 5454
+    port: 8002, // 5173/5454 都在系统端口排除范围内无法绑定（动态变化），改用 8002
     strictPort: true, // 端口被占用时报错而不是换端口
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8001', // 后端地址
+        changeOrigin: true,
+      },
+      // AI 配图静态资源（后端本地存储目录，通过 /images 对外访问）
+      '/images': {
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
       },
     },
