@@ -37,8 +37,16 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.content import CreateRequest, TaskOut, TopicsOut
-from app.services import content_service
+from app.schemas.content import (
+    AdaptItemOut,
+    AdaptRequest,
+    AdaptResponse,
+    CreateRequest,
+    TaskOut,
+    TopicsOut,
+)
+from app.schemas.user import MessageOut
+from app.services import adapt_service, content_service
 
 router = APIRouter(prefix="/api/v1/content", tags=["内容创作"])
 
@@ -177,3 +185,51 @@ def task_detail(
             detail="记录不存在",
         )
     return task
+
+
+@router.post("/adapt", response_model=AdaptResponse, summary="一键多平台适配")
+async def adapt(
+    data: AdaptRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AdaptResponse:
+    """
+    把一篇文章改写为多个平台版本（并发生成）。
+
+    【流程】
+    1. 校验平台列表（去重 + 是否支持）
+    2. adapt_service 并发改写每个平台版本
+    3. 返回每个平台的结果（成功的含内容，失败的含错误信息）
+
+    注意：本接口是 async（内部用 asyncio.gather 并发调用大模型）。
+    """
+    data.validate_platforms()  # 校验 + 去重
+    results = await adapt_service.adapt_content(data.content, data.platforms)
+    return AdaptResponse(
+        results=[AdaptItemOut(**r) for r in results]
+    )
+
+
+@router.delete("/tasks/{task_id}", response_model=MessageOut, summary="删除历史记录")
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    删除单条历史记录（软删除：status 改为 3）。
+
+    【为什么软删除而不是物理删除？】
+    与用户注销同理（见 user.py）：记录虽然对用户不可见，
+    但保留在库里便于数据统计和审计（P2 数据看板会用到）。
+    """
+    task = content_service.get_task_detail(db, current_user.id, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="记录不存在",
+        )
+    task.status = 3  # 已删除（与用户注销的状态值一致）
+    db.add(task)
+    db.commit()
+    return {"message": "记录已删除"}

@@ -29,3 +29,19 @@ export function generateImages(content, count = 3, style = '插画卡通', opera
     { timeout: 180000 } // 180 秒：给足生成 + 重试时间
   )
 }
+
+// 多平台适配：一篇文章改写成多个平台版本
+// 返回 { results: [{ platform, content, success, error }] }
+// 注意：多个平台并发改写（20-40 秒），需要长超时
+export function adaptContent(content, platforms) {
+  return request.post(
+    '/api/v1/content/adapt',
+    { content, platforms },
+    { timeout: 180000 }
+  )
+}
+
+// 删除历史记录（软删除）
+export function deleteTask(id) {
+  return request.delete(`/api/v1/content/tasks/${id}`)
+}

@@ -173,6 +173,65 @@
           </div>
         </div>
 
+        <!-- 🌐 多平台适配区 -->
+        <div class="image-section">
+          <div class="image-toolbar">
+            <span class="image-title">🌐 多平台适配</span>
+            <el-select
+              v-model="adaptPlatforms"
+              multiple
+              size="small"
+              style="width: 280px"
+              placeholder="选择目标平台（可多选）"
+              :disabled="adaptLoading"
+            >
+              <el-option v-for="p in adaptPlatformOptions" :key="p" :label="p" :value="p" />
+            </el-select>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="adaptLoading"
+              :disabled="!finalContent || !adaptPlatforms.length"
+              @click="handleAdapt"
+            >
+              🚀 生成多平台版本
+            </el-button>
+          </div>
+
+          <!-- 适配结果：每个平台一个折叠面板 -->
+          <div v-if="adaptResults.length" class="adapt-results">
+            <el-collapse>
+              <el-collapse-item
+                v-for="(item, i) in adaptResults"
+                :key="item.platform"
+                :title="`${item.success ? '✅' : '❌'} ${item.platform} 版本（${item.content.length} 字）`"
+                :name="i"
+              >
+                <div v-if="item.success">
+                  <el-input
+                    :model-value="item.content"
+                    type="textarea"
+                    :rows="12"
+                    resize="vertical"
+                    readonly
+                  />
+                  <div class="adapt-actions">
+                    <el-button size="small" @click="copyAdapt(item)">📋 复制</el-button>
+                    <el-button size="small" type="primary" @click="exportAdapt(item)">⬇️ 导出 MD</el-button>
+                  </div>
+                </div>
+                <el-alert v-else type="error" :title="`${item.platform} 适配失败`" :description="item.error" show-icon />
+              </el-collapse-item>
+            </el-collapse>
+          </div>
+
+          <!-- 加载占位 -->
+          <div v-if="adaptLoading" class="image-loading">
+            <el-skeleton :rows="1" animated class="skeleton" />
+            <div class="loading-text">AI 正在为各平台改写版本（并发生成），约需 20-40 秒...</div>
+          </div>
+        </div>
+
         <!-- 在线编辑（textarea 双向绑定） -->
         <el-input
           v-model="finalContent"
@@ -198,7 +257,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
-import { generateTopics, generateImages } from '../api/content'
+import { generateTopics, generateImages, adaptContent } from '../api/content'
 
 const route = useRoute()
 const router = useRouter()
@@ -234,6 +293,12 @@ const images = ref([]) // 配图列表 [{ url, scene, regenerating }]
 const imageLoading = ref(false) // 是否正在配图
 const imageStyle = ref('插画卡通') // 配图风格
 const imageStyles = ['插画卡通', '写实摄影', '科技未来', '简约扁平', '国潮古风']
+
+// 多平台适配状态
+const adaptPlatforms = ref([]) // 选中的目标平台
+const adaptPlatformOptions = ['小红书', '公众号', '知乎']
+const adaptResults = ref([]) // 适配结果 [{ platform, content, success, error }]
+const adaptLoading = ref(false) // 是否正在适配
 
 // 步骤定义（与后端节点一一对应）
 const steps = [
@@ -541,6 +606,53 @@ async function regenerateImage(img, index) {
   }
 }
 
+// ---------- 多平台适配 ----------
+async function handleAdapt() {
+  if (!finalContent.value) {
+    ElMessage.warning('请先生成文章内容')
+    return
+  }
+  if (!adaptPlatforms.value.length) {
+    ElMessage.warning('请至少选择一个目标平台')
+    return
+  }
+  adaptLoading.value = true
+  adaptResults.value = []
+  try {
+    const data = await adaptContent(finalContent.value, [...adaptPlatforms.value])
+    adaptResults.value = data.results || []
+    const okCount = adaptResults.value.filter((r) => r.success).length
+    ElMessage.success(`多平台适配完成：${okCount}/${adaptResults.value.length} 个平台成功`)
+  } catch (e) {
+    // 错误已由 axios 拦截器统一提示
+  } finally {
+    adaptLoading.value = false
+  }
+}
+
+// 复制某个平台版本
+async function copyAdapt(item) {
+  try {
+    await navigator.clipboard.writeText(item.content)
+    ElMessage.success(`${item.platform} 版本已复制`)
+  } catch {
+    ElMessage.info('复制失败，请手动选择复制')
+  }
+}
+
+// 导出某个平台版本为 MD
+function exportAdapt(item) {
+  const md = `# ${item.platform} 版本\n\n${item.content}\n`
+  const blob = new Blob([md], { type: 'text/markdown' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${item.platform}版本.md`
+  a.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success(`${item.platform} 版本已导出`)
+}
+
 // ---------- 重新创作 ----------
 function resetAll() {
   // 断开可能残留的连接，重置所有状态
@@ -553,6 +665,8 @@ function resetAll() {
   finalContent.value = ''
   qualityReport.value = null
   images.value = []
+  adaptPlatforms.value = []
+  adaptResults.value = []
   generating.value = false
   phase.value = 'input'
 }
@@ -850,6 +964,17 @@ function handleUserCommand(command) {
 .skeleton {
   max-width: 400px;
   margin: 0 auto;
+}
+
+/* 多平台适配结果 */
+.adapt-results {
+  margin-top: 4px;
+}
+
+.adapt-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
 }
 
 .result-editor :deep(.el-textarea__inner) {

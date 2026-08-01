@@ -92,7 +92,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
-import { getTasks, getTaskDetail } from '../api/content'
+import { getTasks, getTaskDetail, deleteTask as deleteTaskApi } from '../api/content'
 
 const route = useRoute()
 const router = useRouter()
@@ -151,16 +151,17 @@ function reuse(row) {
   })
 }
 
-// 删除（软删除后端未实现，MVP 前端暂只提示）
+// 删除（软删除：后端将 status 改为 3，列表不再返回）
 async function deleteTask(row) {
   try {
     await ElMessageBox.confirm(`确定删除「${row.selected_title?.slice(0, 20)}」吗？`, '提示', {
       type: 'warning',
     })
-    ElMessage.info('删除接口将在后续版本提供')
-    // TODO: 接入 DELETE /api/v1/content/tasks/{id} 后取消上行并刷新列表
+    await deleteTaskApi(row.id)
+    ElMessage.success('已删除')
+    loadTasks() // 刷新列表
   } catch {
-    // 用户取消
+    // 用户取消 或 请求失败（错误已由 axios 拦截器统一提示）
   }
 }
 

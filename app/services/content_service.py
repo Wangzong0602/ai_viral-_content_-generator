@@ -192,10 +192,11 @@ def stream_generate(
 
 
 def get_task_list(db: Session, user_id: int, limit: int = 20) -> list[CreationTask]:
-    """查询当前用户的历史生成记录（按时间倒序）。"""
+    """查询当前用户的历史生成记录（按时间倒序，不含已删除的）。"""
     stmt = (
         select(CreationTask)
         .where(CreationTask.user_id == user_id)
+        .where(CreationTask.status != 3)  # 排除已删除（软删除）
         .order_by(CreationTask.created_at.desc())
         .limit(limit)
     )
@@ -203,8 +204,10 @@ def get_task_list(db: Session, user_id: int, limit: int = 20) -> list[CreationTa
 
 
 def get_task_detail(db: Session, user_id: int, task_id: int) -> CreationTask | None:
-    """查询单条记录详情（带用户隔离：只能查自己的）。"""
+    """查询单条记录详情（带用户隔离 + 排除已删除：只能查自己的、未删除的）。"""
     stmt = select(CreationTask).where(
-        CreationTask.id == task_id, CreationTask.user_id == user_id
+        CreationTask.id == task_id,
+        CreationTask.user_id == user_id,
+        CreationTask.status != 3,
     )
     return db.scalar(stmt)

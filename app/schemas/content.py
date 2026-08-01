@@ -31,7 +31,12 @@ class CreateRequest(BaseModel):
     def validate_platform(self) -> None:
         """校验平台是否支持（调用方在路由里手动调用）。"""
         if self.platform not in SUPPORTED_PLATFORMS:
-            raise ValueError(f"不支持的平台：{self.platform}，可选 {SUPPORTED_PLATFORMS}")
+            from app.core.exceptions import BizException
+
+            raise BizException(
+                f"不支持的平台：{self.platform}，可选 {SUPPORTED_PLATFORMS}",
+                status_code=422,
+            )
 
 
 class TopicOut(BaseModel):
@@ -68,3 +73,54 @@ class TaskOut(BaseModel):
     completed_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class AdaptRequest(BaseModel):
+    """
+    多平台适配请求模型。
+
+    - content：需要适配的原文（通常是已生成的爆文）
+    - platforms：目标平台列表（至少 1 个，最多全部支持）
+    - source_platform：原文所属平台（可选，用于提示词说明来源）
+    """
+
+    content: str = Field(..., min_length=50, max_length=20000, description="原文内容")
+    platforms: list[str] = Field(..., min_length=1, max_length=10, description="目标平台列表")
+    source_platform: str | None = Field(default=None, max_length=20, description="原文所属平台（可选）")
+
+    def validate_platforms(self) -> None:
+        """校验平台列表合法性（去重 + 必须在支持列表内）。
+
+        注意：抛 BizException 而不是 ValueError——
+        ValueError 不被全局异常处理器接管会变成 500，BizException 会转成 422。
+        """
+        # 去重（保持顺序）
+        seen: list[str] = []
+        for p in self.platforms:
+            if p not in seen:
+                seen.append(p)
+        self.platforms = seen
+        # 校验每个平台是否支持
+        for p in self.platforms:
+            if p not in SUPPORTED_PLATFORMS:
+                from app.core.exceptions import BizException
+
+                raise BizException(
+                    f"不支持的平台：{p}，可选 {SUPPORTED_PLATFORMS}",
+                    status_code=422,
+                )
+
+
+class AdaptItemOut(BaseModel):
+    """单个平台适配结果。"""
+
+    platform: str  # 平台名
+    content: str  # 适配后的内容
+    success: bool  # 是否成功
+    error: str = ""  # 失败原因（success=False 时）
+
+
+class AdaptResponse(BaseModel):
+    """多平台适配响应。"""
+
+    results: list[AdaptItemOut]
