@@ -47,17 +47,19 @@
           </el-button>
         </div>
 
-        <!-- 选题展示（两步合一：自动选中第一个，同时让用户能看到） -->
+        <!-- 选题展示（两步分离：生成后停留，用户自己选择再开始创作） -->
         <div v-if="topics.length" class="topics-section">
           <div class="topics-title">
-            <el-tag type="success" effect="plain">AI 已生成 {{ topics.length }} 个爆款选题，自动采用第 1 个继续创作</el-tag>
+            <el-tag type="success" effect="plain">
+              AI 已生成 {{ topics.length }} 个爆款选题，请点击选择一个（当前：{{ selectedIndex + 1 }}）
+            </el-tag>
           </div>
           <div class="topic-list">
             <div
               v-for="(t, i) in topics"
               :key="i"
               class="topic-item"
-              :class="{ 'topic-active': i === 0 }"
+              :class="{ 'topic-active': selectedIndex === i }"
               @click="selectTopic(i)"
             >
               <span class="topic-index">{{ i + 1 }}</span>
@@ -69,6 +71,13 @@
                 </div>
               </div>
             </div>
+          </div>
+          <!-- 开始创作按钮：用户确认选题后触发 -->
+          <div class="topics-action">
+            <el-button type="primary" size="large" :loading="generating" @click="startStreamGeneration">
+              🚀 用「{{ selectedTopic?.title || '第1个' }}」开始创作
+            </el-button>
+            <el-button size="large" :disabled="generating" @click="resetAll">🔄 换个主题</el-button>
           </div>
         </div>
       </el-card>
@@ -106,6 +115,7 @@
             <div class="result-actions">
               <el-button size="small" @click="copyContent">📋 一键复制</el-button>
               <el-button size="small" type="primary" @click="exportMarkdown">⬇️ 导出 Markdown</el-button>
+              <el-button size="small" @click="exportHtml">🌐 导出 HTML（含图）</el-button>
               <el-button size="small" @click="exportTxt">⬇️ 导出纯文本</el-button>
               <el-button size="small" type="success" @click="resetAll">🔄 再写一篇</el-button>
             </div>
@@ -118,6 +128,49 @@
             {{ qualityReport.has_sensitive ? `⚠️ 含敏感词：${qualityReport.words.join('、')}` : '✅ 内容安全，无敏感词' }}
           </el-tag>
           <el-tag type="info" size="small">质量分：{{ qualityScore }}</el-tag>
+        </div>
+
+        <!-- AI 配图区 -->
+        <div class="image-section">
+          <div class="image-toolbar">
+            <span class="image-title">🖼️ AI 配图</span>
+            <el-select v-model="imageStyle" size="small" style="width: 120px" :disabled="imageLoading">
+              <el-option v-for="s in imageStyles" :key="s" :label="s" :value="s" />
+            </el-select>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="imageLoading"
+              :disabled="!finalContent"
+              @click="handleGenerateImages"
+            >
+              {{ images.length ? '🔄 重新配图' : '✨ 生成配图' }}
+            </el-button>
+          </div>
+
+          <!-- 图片网格 -->
+          <div v-if="images.length" class="image-grid">
+            <div v-for="(img, i) in images" :key="i" class="image-item">
+              <el-image
+                :src="img.url"
+                fit="cover"
+                :preview-src-list="images.map((x) => x.url)"
+                preview-teleported
+                class="image-preview"
+              />
+              <div class="image-actions">
+                <el-button size="small" :loading="img.regenerating" @click="regenerateImage(img, i)">
+                  🔄 换一张
+                </el-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 加载占位 -->
+          <div v-if="imageLoading" class="image-loading">
+            <el-skeleton :rows="1" animated class="skeleton" />
+            <div class="loading-text">AI 正在根据文章内容构思配图，约需 20-60 秒...</div>
+          </div>
         </div>
 
         <!-- 在线编辑（textarea 双向绑定） -->
@@ -145,7 +198,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
-import { generateTopics } from '../api/content'
+import { generateTopics, generateImages } from '../api/content'
 
 const route = useRoute()
 const router = useRouter()
@@ -163,6 +216,7 @@ const loadingTopics = ref(false)
 // 选题
 const topics = ref([])
 const selectedTopic = ref(null)
+const selectedIndex = ref(0) // 当前选中的选题序号（默认第 1 个）
 
 // 生成状态
 const generating = ref(false) // 是否正在生成
@@ -174,6 +228,12 @@ const es = ref(null) // EventSource 实例（用于中途断开）
 const finalContent = ref('')
 const qualityReport = ref(null)
 const qualityScore = ref(0)
+
+// AI 配图状态
+const images = ref([]) // 配图列表 [{ url, scene, regenerating }]
+const imageLoading = ref(false) // 是否正在配图
+const imageStyle = ref('插画卡通') // 配图风格
+const imageStyles = ['插画卡通', '写实摄影', '科技未来', '简约扁平', '国潮古风']
 
 // 步骤定义（与后端节点一一对应）
 const steps = [
@@ -208,8 +268,13 @@ if (route.query.keyword) {
     platform.value = String(route.query.platform)
   }
   if (route.query.auto === '1') {
-    // 延迟到页面渲染完成后自动触发生成
-    setTimeout(() => startGenerate(), 300)
+    // 历史记录复用场景：延迟到页面渲染完成后，生成选题后自动开始创作
+    setTimeout(() => {
+      startGenerate().then(() => {
+        // 选题生成后（已有默认选中第 1 个），自动开始创作
+        startStreamGeneration()
+      })
+    }, 300)
   }
 }
 
@@ -224,13 +289,13 @@ function stepState(index) {
   return index < curIndex ? 'done' : 'wait'
 }
 
-// ---------- 选择选题（两步合一：默认选第一个） ----------
+// ---------- 选择选题（两步分离：用户点击自己的想要的选题） ----------
 function selectTopic(index) {
+  selectedIndex.value = index
   selectedTopic.value = topics.value[index]
-  topics.value.forEach((t, i) => {})
 }
 
-// ---------- 开始生成 ----------
+// ---------- 第一步：生成选题（只生成，不自动创作） ----------
 async function startGenerate() {
   if (!keyword.value.trim()) {
     ElMessage.warning('请输入创作主题或关键词')
@@ -245,10 +310,10 @@ async function startGenerate() {
       ElMessage.error('选题生成失败，请重试')
       return
     }
-    // 两步合一：自动采用第一个选题，立即进入完整创作
+    // 默认选中第 1 个，但【不】自动创作——等用户自己选择
+    selectedIndex.value = 0
     selectedTopic.value = topics.value[0]
     phase.value = 'topics'
-    startStreamGeneration()
   } catch (e) {
     // 错误已由 axios 拦截器统一提示
   } finally {
@@ -354,15 +419,126 @@ function downloadFile(content, filename, type = 'text/markdown') {
   URL.revokeObjectURL(url) // 释放内存
 }
 
+// 生成 Markdown 图片引用块（图在文章末尾集中展示）
+function buildMarkdownImages() {
+  if (!images.value.length) return ''
+  const lines = ['', '---', '', '## 📷 配图', '']
+  images.value.forEach((img, i) => {
+    // 转成后端绝对 URL（方便本地查看时也能加载，服务运行期间有效）
+    const absUrl = `http://127.0.0.1:8001${img.url}`
+    lines.push(`![配图${i + 1}](${absUrl})`)
+  })
+  lines.push('')
+  return lines.join('\n')
+}
+
 function exportMarkdown() {
-  const md = `# ${selectedTopic.value?.title || 'AI 生成文章'}\n\n${finalContent.value}\n`
-  downloadFile(md, `爆文-${selectedTopic.value?.title?.slice(0, 20) || '未命名'}.md`)
-  ElMessage.success('已导出 Markdown 文件')
+  const title = selectedTopic.value?.title || 'AI 生成文章'
+  // Markdown 导出：标题 + 正文 + 配图引用（MD 本身不支持内嵌二进制，用 URL 引用）
+  const md = `# ${title}\n\n${finalContent.value}\n${buildMarkdownImages()}`
+  downloadFile(md, `爆文-${title?.slice(0, 20) || '未命名'}.md`)
+  ElMessage.success('已导出 Markdown 文件（含配图引用）')
+}
+
+// 导出 HTML：图片转 base64 内嵌进文件，任何电脑打开都能看到（不依赖后端）
+async function exportHtml() {
+  const title = selectedTopic.value?.title || 'AI 生成文章'
+  let imgHtml = ''
+  // 把每张图转成 base64 内嵌（fetch 图片 → base64）
+  for (let i = 0; i < images.value.length; i++) {
+    const url = images.value[i].url
+    try {
+      const resp = await fetch(url)
+      const blob = await resp.blob()
+      const base64 = await new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.readAsDataURL(blob)
+      })
+      imgHtml += `<div style="margin:16px 0;text-align:center;"><img src="${base64}" alt="配图${i + 1}" style="max-width:100%;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);" /></div>\n`
+    } catch {
+      imgHtml += `<p style="color:#999;">配图${i + 1}加载失败（后端未运行）</p>\n`
+    }
+  }
+  // 转义正文中的 HTML 特殊字符，防止正文内容破坏页面结构
+  const escapeHtml = (s) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>${escapeHtml(title)}</title>
+<style>
+body { max-width: 800px; margin: 40px auto; padding: 0 20px; font-family: 'PingFang SC','Microsoft YaHei',sans-serif; line-height: 1.8; color: #333; }
+h1 { border-bottom: 2px solid #409eff; padding-bottom: 10px; }
+</style>
+</head>
+<body>
+<h1>${escapeHtml(title)}</h1>
+<div>${escapeHtml(finalContent.value)}</div>
+${imgHtml}
+</body>
+</html>`
+  downloadFile(html, `爆文-${title?.slice(0, 20) || '未命名'}.html`, 'text/html')
+  ElMessage.success('已导出 HTML（图片已内嵌，可随处打开）')
 }
 
 function exportTxt() {
   downloadFile(finalContent.value, `爆文-${selectedTopic.value?.title?.slice(0, 20) || '未命名'}.txt`, 'text/plain')
   ElMessage.success('已导出纯文本文件')
+}
+
+// ---------- AI 配图 ----------
+async function handleGenerateImages() {
+  if (!finalContent.value) {
+    ElMessage.warning('请先生成文章内容')
+    return
+  }
+  imageLoading.value = true
+  images.value = []
+  try {
+    const data = await generateImages(
+      finalContent.value,
+      3, // 默认生成 3 张
+      imageStyle.value
+    )
+    images.value = (data.images || []).map((img) => ({
+      url: img.url,
+      scene: img.scene || '',
+      regenerating: false,
+    }))
+    ElMessage.success(`配图完成，共 ${images.value.length} 张`)
+  } catch (e) {
+    // 错误已由 axios 拦截器统一提示
+  } finally {
+    imageLoading.value = false
+  }
+}
+
+// 单张重新生成（保持场景一致，换一张）
+async function regenerateImage(img, index) {
+  if (!img.scene) {
+    ElMessage.warning('该图片缺少场景信息，无法重新生成')
+    return
+  }
+  img.regenerating = true
+  try {
+    const data = await generateImages(
+      finalContent.value,
+      1,
+      imageStyle.value,
+      'regenerate',
+      img.scene
+    )
+    if (data.images && data.images.length) {
+      img.url = data.images[0].url
+      ElMessage.success('已换一张')
+    }
+  } catch (e) {
+    // 错误已由 axios 拦截器统一提示
+  } finally {
+    img.regenerating = false
+  }
 }
 
 // ---------- 重新创作 ----------
@@ -371,9 +547,12 @@ function resetAll() {
   if (es.value) es.value.close()
   keyword.value = ''
   topics.value = []
+  selectedTopic.value = null
+  selectedIndex.value = 0
   streamText.value = ''
   finalContent.value = ''
   qualityReport.value = null
+  images.value = []
   generating.value = false
   phase.value = 'input'
 }
@@ -462,6 +641,14 @@ function handleUserCommand(command) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* 选题下方的操作按钮区（开始创作 / 换个主题） */
+.topics-action {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: center;
 }
 
 .topic-item {
@@ -600,6 +787,69 @@ function handleUserCommand(command) {
   display: flex;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+/* AI 配图区 */
+.image-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.image-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.image-title {
+  font-weight: 600;
+  color: #303133;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.image-item {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ebeef5;
+  background: #fff;
+}
+
+.image-preview {
+  width: 100%;
+  height: 220px;
+  display: block;
+}
+
+.image-actions {
+  padding: 8px;
+  display: flex;
+  justify-content: center;
+}
+
+.image-loading {
+  text-align: center;
+  padding: 20px;
+}
+
+.loading-text {
+  margin-top: 12px;
+  color: #909399;
+  font-size: 13px;
+}
+
+.skeleton {
+  max-width: 400px;
+  margin: 0 auto;
 }
 
 .result-editor :deep(.el-textarea__inner) {
