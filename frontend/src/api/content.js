@@ -45,3 +45,13 @@ export function adaptContent(content, platforms) {
 export function deleteTask(id) {
   return request.delete(`/api/v1/content/tasks/${id}`)
 }
+
+// 爆文逆向分析：输入链接或内容，返回拆解报告
+// 返回 { title, content_len, report: { title_hook, opening_3s, ... } }
+export function analyzeArticle(inputText) {
+  return request.post(
+    '/api/v1/content/analyze',
+    { input_text: inputText },
+    { timeout: 120000 } // 分析需 10-30 秒，长超时
+  )
+}

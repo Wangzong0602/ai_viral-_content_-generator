@@ -41,12 +41,15 @@ from app.schemas.content import (
     AdaptItemOut,
     AdaptRequest,
     AdaptResponse,
+    AnalyzeReportOut,
+    AnalyzeRequest,
+    AnalyzeResponse,
     CreateRequest,
     TaskOut,
     TopicsOut,
 )
 from app.schemas.user import MessageOut
-from app.services import adapt_service, content_service
+from app.services import adapt_service, analyze_service, content_service
 
 router = APIRouter(prefix="/api/v1/content", tags=["内容创作"])
 
@@ -233,3 +236,30 @@ def delete_task(
     db.add(task)
     db.commit()
     return {"message": "记录已删除"}
+
+
+@router.post("/analyze", response_model=AnalyzeResponse, summary="爆文逆向分析")
+async def analyze(
+    data: AnalyzeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AnalyzeResponse:
+    """
+    逆向分析一篇爆文（学习功能）。
+
+    【输入方式】
+    - 链接：input_text 填文章 URL → 服务端抓取网页提取正文
+    - 内容：input_text 直接粘贴文章全文
+
+    【输出】
+    拆解报告：标题钩子 / 开头3秒 / 内容结构 / 情绪价值 / 行动召唤 / SEO关键词 / 总体方法论
+
+    【async 说明】
+    内部包含网络抓取（httpx async）和大模型调用（线程池），不阻塞事件循环。
+    """
+    result = await analyze_service.analyze_viral_article(data.input_text)
+    return AnalyzeResponse(
+        title=result["title"],
+        content_len=result["content_len"],
+        report=AnalyzeReportOut(**result["report"]),
+    )

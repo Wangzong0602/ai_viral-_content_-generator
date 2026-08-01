@@ -241,6 +241,57 @@
           class="result-editor"
         />
       </el-card>
+
+      <!-- ========== 爆文逆向分析（学习功能，独立于创作流程） ========== -->
+      <el-card class="analyze-card">
+        <template #header>
+          <div class="gen-header">
+            <span>🔍 爆文逆向分析</span>
+            <el-tag size="small" type="info">学习功能：拆解一篇爆文为什么能火</el-tag>
+          </div>
+        </template>
+
+        <!-- 输入区 -->
+        <div class="analyze-input">
+          <el-input
+            v-model="analyzeInput"
+            type="textarea"
+            :rows="5"
+            resize="vertical"
+            placeholder="粘贴爆文链接（自动抓取）或直接粘贴文章全文，例如：https://... 或 整篇文章内容..."
+          />
+          <div class="analyze-toolbar">
+            <el-button
+              type="primary"
+              :loading="analyzeLoading"
+              :disabled="!analyzeInput.trim()"
+              @click="handleAnalyze"
+            >
+              🔍 开始分析
+            </el-button>
+            <span v-if="analyzeInput.startsWith('http')" class="analyze-hint">已检测到链接，将自动抓取正文</span>
+          </div>
+        </div>
+
+        <!-- 分析结果 -->
+        <div v-if="analyzeResult" class="analyze-result">
+          <div v-if="analyzeResult.title" class="analyze-title">{{ analyzeResult.title }}</div>
+          <div class="analyze-meta">正文 {{ analyzeResult.content_len }} 字</div>
+          <el-divider />
+          <div class="analyze-report">
+            <div v-for="item in analyzeReportItems" :key="item.key" class="report-item">
+              <div class="report-label">{{ item.label }}</div>
+              <div class="report-text">{{ analyzeResult.report[item.key] }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 加载占位 -->
+        <div v-if="analyzeLoading" class="image-loading">
+          <el-skeleton :rows="2" animated class="skeleton" />
+          <div class="loading-text">AI 正在拆解爆文要素，约需 10-30 秒...</div>
+        </div>
+      </el-card>
     </main>
   </div>
 </template>
@@ -257,7 +308,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
-import { generateTopics, generateImages, adaptContent } from '../api/content'
+import { generateTopics, generateImages, adaptContent, analyzeArticle } from '../api/content'
 
 const route = useRoute()
 const router = useRouter()
@@ -299,6 +350,21 @@ const adaptPlatforms = ref([]) // 选中的目标平台
 const adaptPlatformOptions = ['小红书', '公众号', '知乎']
 const adaptResults = ref([]) // 适配结果 [{ platform, content, success, error }]
 const adaptLoading = ref(false) // 是否正在适配
+
+// 爆文逆向分析状态
+const analyzeInput = ref('') // 输入的链接或内容
+const analyzeLoading = ref(false) // 是否正在分析
+const analyzeResult = ref(null) // 分析结果 { title, content_len, report }
+// 报告展示字段（顺序固定）
+const analyzeReportItems = [
+  { key: 'title_hook', label: '🎯 标题钩子' },
+  { key: 'opening_3s', label: '⏱️ 开头 3 秒' },
+  { key: 'content_structure', label: '📐 内容结构' },
+  { key: 'emotion_points', label: '💗 情绪价值' },
+  { key: 'cta', label: '📣 行动召唤' },
+  { key: 'seo_keywords', label: '🔎 SEO 关键词' },
+  { key: 'overall', label: '📝 总体方法论' },
+]
 
 // 步骤定义（与后端节点一一对应）
 const steps = [
@@ -653,6 +719,25 @@ function exportAdapt(item) {
   ElMessage.success(`${item.platform} 版本已导出`)
 }
 
+// ---------- 爆文逆向分析 ----------
+async function handleAnalyze() {
+  if (!analyzeInput.value.trim()) {
+    ElMessage.warning('请输入文章链接或内容')
+    return
+  }
+  analyzeLoading.value = true
+  analyzeResult.value = null
+  try {
+    const data = await analyzeArticle(analyzeInput.value.trim())
+    analyzeResult.value = data
+    ElMessage.success('分析完成')
+  } catch (e) {
+    // 错误已由 axios 拦截器统一提示
+  } finally {
+    analyzeLoading.value = false
+  }
+}
+
 // ---------- 重新创作 ----------
 function resetAll() {
   // 断开可能残留的连接，重置所有状态
@@ -975,6 +1060,68 @@ function handleUserCommand(command) {
   margin-top: 8px;
   display: flex;
   gap: 8px;
+}
+
+/* 爆文逆向分析 */
+.analyze-card {
+  margin-top: 16px;
+}
+
+.analyze-input {
+  margin-bottom: 8px;
+}
+
+.analyze-toolbar {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.analyze-hint {
+  font-size: 12px;
+  color: #67c23a;
+}
+
+.analyze-result {
+  margin-top: 16px;
+}
+
+.analyze-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.analyze-meta {
+  font-size: 12px;
+  color: #909399;
+}
+
+.analyze-report {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.report-item {
+  padding: 12px 16px;
+  background: #fafafa;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+}
+
+.report-label {
+  font-weight: 600;
+  color: #409eff;
+  margin-bottom: 6px;
+}
+
+.report-text {
+  color: #606266;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 .result-editor :deep(.el-textarea__inner) {

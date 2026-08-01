@@ -124,3 +124,35 @@ class AdaptResponse(BaseModel):
     """多平台适配响应。"""
 
     results: list[AdaptItemOut]
+
+
+class AnalyzeRequest(BaseModel):
+    """
+    爆文逆向分析请求模型。
+
+    支持两种输入：
+    - 链接：input_text 填文章 URL，服务端自动抓取
+    - 内容：input_text 直接填文章全文
+    """
+
+    input_text: str = Field(..., min_length=10, max_length=30000, description="文章链接或文章内容")
+
+
+class AnalyzeReportOut(BaseModel):
+    """分析报告中的单个要素（结构固定，内容为文本）。"""
+
+    title_hook: str = ""
+    opening_3s: str = ""
+    content_structure: str = ""
+    emotion_points: str = ""
+    cta: str = ""
+    seo_keywords: str = ""
+    overall: str = ""
+
+
+class AnalyzeResponse(BaseModel):
+    """爆文逆向分析响应。"""
+
+    title: str = ""  # 文章标题（链接抓取时有值）
+    content_len: int  # 正文长度
+    report: AnalyzeReportOut  # 拆解报告
