@@ -54,6 +54,16 @@ from app.services import adapt_service, analyze_service, content_service
 router = APIRouter(prefix="/api/v1/content", tags=["内容创作"])
 
 
+def _to_task_out(db: Session, task) -> TaskOut:
+    """
+    把 CreationTask ORM 对象转成 TaskOut，并附加该任务的配图 URL 列表。
+    （TaskOut 的 images 字段不能靠 from_attributes 自动填充，需手动查询）
+    """
+    out = TaskOut.model_validate(task)  # 复用 from_attributes 转换基础字段
+    out.images = content_service.get_task_images(db, task.id)
+    return out
+
+
 @router.post("/topics", response_model=TopicsOut, summary="生成爆款选题")
 def generate_topics(
     data: CreateRequest,  # 前端传 keyword + platform
@@ -166,9 +176,9 @@ def task_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """查看当前用户的生成历史（最新在前）。"""
+    """查看当前用户的生成历史（最新在前，含每篇的配图）。"""
     tasks = content_service.get_task_list(db, current_user.id, limit)
-    return tasks
+    return [_to_task_out(db, t) for t in tasks]
 
 
 @router.get("/tasks/{task_id}", response_model=TaskOut, summary="历史记录详情")
@@ -178,7 +188,7 @@ def task_detail(
     current_user: User = Depends(get_current_user),
 ):
     """
-    查看单条生成记录详情。
+    查看单条生成记录详情（含配图）。
     get_task_detail 内部做了 user_id 匹配，别人看不了你的记录。
     """
     task = content_service.get_task_detail(db, current_user.id, task_id)
@@ -187,7 +197,7 @@ def task_detail(
             status_code=status.HTTP_404_NOT_FOUND,  # 404：记录不存在
             detail="记录不存在",
         )
-    return task
+    return _to_task_out(db, task)
 
 
 @router.post("/adapt", response_model=AdaptResponse, summary="一键多平台适配")

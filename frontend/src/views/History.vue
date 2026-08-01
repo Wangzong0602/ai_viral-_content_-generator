@@ -74,6 +74,21 @@
             <el-tag v-if="currentTask.error_message" size="small" type="danger">失败原因：{{ currentTask.error_message }}</el-tag>
           </div>
           <div class="detail-title">{{ currentTask.selected_title }}</div>
+          <!-- 配图展示 -->
+          <div v-if="currentTask.images && currentTask.images.length" class="detail-images">
+            <div class="detail-images-title">📷 配图（{{ currentTask.images.length }} 张）</div>
+            <div class="detail-images-grid">
+              <el-image
+                v-for="(img, i) in currentTask.images"
+                :key="i"
+                :src="img"
+                fit="cover"
+                :preview-src-list="currentTask.images"
+                preview-teleported
+                class="detail-image"
+              />
+            </div>
+          </div>
           <div class="detail-content">{{ currentTask.content }}</div>
           <div class="detail-actions">
             <el-button size="small" @click="copyDetail">📋 复制</el-button>
@@ -261,6 +276,31 @@ onMounted(loadTasks)
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 12px;
+}
+
+/* 详情页配图 */
+.detail-images {
+  margin-bottom: 12px;
+}
+
+.detail-images-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.detail-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.detail-image {
+  width: 100%;
+  height: 160px;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
 }
 
 .detail-content {

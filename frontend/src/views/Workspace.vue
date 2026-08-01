@@ -341,6 +341,7 @@ const generating = ref(false) // 是否正在生成
 const streaming = ref(false) // 是否正在流式输出正文
 const streamText = ref('') // 流式正文（打字机）
 const es = ref(null) // EventSource 实例（用于中途断开）
+const currentTaskId = ref(null) // 当前创作任务的 ID（配图时关联落库）
 
 // 结果
 const finalContent = ref('')
@@ -501,6 +502,7 @@ function startStreamGeneration() {
     finalContent.value = data.content
     qualityReport.value = data.sensitive_report
     qualityScore.value = data.quality_score
+    currentTaskId.value = data.task_id // 保存任务 ID（配图落库关联用）
     generating.value = false
     streaming.value = false
     phase.value = 'result'
@@ -639,7 +641,10 @@ async function handleGenerateImages() {
     const data = await generateImages(
       finalContent.value,
       3, // 默认生成 3 张
-      imageStyle.value
+      imageStyle.value,
+      'generate',
+      '',
+      currentTaskId.value // 关联创作任务（落库）
     )
     images.value = (data.images || []).map((img) => ({
       url: img.url,
@@ -667,7 +672,8 @@ async function regenerateImage(img, index) {
       1,
       imageStyle.value,
       'regenerate',
-      img.scene
+      img.scene,
+      currentTaskId.value // 关联创作任务（落库更新同场景记录）
     )
     if (data.images && data.images.length) {
       img.url = data.images[0].url

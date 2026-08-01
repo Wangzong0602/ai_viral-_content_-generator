@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from app.agents import topic_agent
 from app.agents.graph import app  # 编译好的 LangGraph 应用（全局单例）
 from app.models.creation_task import CreationTask
+from app.models.image_record import ImageRecord
 
 # 节点名 → 中文步骤名映射（前端进度条展示用）
 NODE_NAMES = {
@@ -211,3 +212,19 @@ def get_task_detail(db: Session, user_id: int, task_id: int) -> CreationTask | N
         CreationTask.status != 3,
     )
     return db.scalar(stmt)
+
+
+def get_task_images(db: Session, task_id: int) -> list[str]:
+    """
+    查询某任务关联的配图 URL 列表（按创建时间排序）。
+
+    :param db: 数据库会话
+    :param task_id: 创作任务 ID
+    :return: 图片 URL 列表（可能为空）
+    """
+    stmt = (
+        select(ImageRecord.url)
+        .where(ImageRecord.task_id == task_id)
+        .order_by(ImageRecord.created_at.asc())
+    )
+    return list(db.scalars(stmt))

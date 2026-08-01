@@ -71,6 +71,7 @@ class TaskOut(BaseModel):
     quality_score: int
     created_at: datetime
     completed_at: datetime | None
+    images: list[str] = Field(default_factory=list)  # 该任务的配图 URL 列表
 
     model_config = {"from_attributes": True}
 

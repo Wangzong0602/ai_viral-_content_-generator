@@ -21,11 +21,12 @@ export function getTaskDetail(id) {
 // AI 配图：根据文章内容生成配图
 // 返回 { images: [{ url, scene }] }
 // operation: generate=常规生成 regenerate=重新生成单张（需要 scene）
+// taskId: 关联的创作任务 ID（配图记录落库，历史记录可查）
 // 注意：配图生成较慢（30-60 秒），必须单独设长超时（默认 axios 30 秒不够）
-export function generateImages(content, count = 3, style = '插画卡通', operation = 'generate', scene = '') {
+export function generateImages(content, count = 3, style = '插画卡通', operation = 'generate', scene = '', taskId = null) {
   return request.post(
     '/api/v1/content/images/generate',
-    { content, count, style, operation, scene },
+    { content, count, style, operation, scene, task_id: taskId },
     { timeout: 180000 } // 180 秒：给足生成 + 重试时间
   )
 }
