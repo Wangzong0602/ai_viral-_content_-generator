@@ -118,6 +118,7 @@ class AdaptItemOut(BaseModel):
     content: str  # 适配后的内容
     success: bool  # 是否成功
     error: str = ""  # 失败原因（success=False 时）
+    warning: str = ""  # 字数等质量提示（success=True 但未完全达标时）
 
 
 class AdaptResponse(BaseModel):

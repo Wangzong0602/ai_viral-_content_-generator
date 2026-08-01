@@ -204,10 +204,18 @@
               <el-collapse-item
                 v-for="(item, i) in adaptResults"
                 :key="item.platform"
-                :title="`${item.success ? '✅' : '❌'} ${item.platform} 版本（${item.content.length} 字）`"
+                :title="`${item.success ? '✅' : '❌'} ${item.platform} 版本（${item.content.length} 字）${item.warning ? ' ⚠️' : ''}`"
                 :name="i"
               >
                 <div v-if="item.success">
+                  <el-alert
+                    v-if="item.warning"
+                    :title="item.warning"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    class="adapt-warning"
+                  />
                   <el-input
                     :model-value="item.content"
                     type="textarea"
@@ -1060,6 +1068,10 @@ function handleUserCommand(command) {
   margin-top: 8px;
   display: flex;
   gap: 8px;
+}
+
+.adapt-warning {
+  margin-bottom: 12px;
 }
 
 /* 爆文逆向分析 */
