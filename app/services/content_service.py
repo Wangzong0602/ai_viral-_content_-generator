@@ -36,6 +36,8 @@ from sqlalchemy.orm import Session
 
 from app.agents import topic_agent
 from app.agents.graph import app  # 编译好的 LangGraph 应用（全局单例）
+from app.core.exceptions import BizException
+from app.core.logger import logger
 from app.models.creation_task import CreationTask
 from app.models.image_record import ImageRecord
 
@@ -228,3 +230,84 @@ def get_task_images(db: Session, task_id: int) -> list[str]:
         .order_by(ImageRecord.created_at.asc())
     )
     return list(db.scalars(stmt))
+
+
+def generate_one_article(db: Session, user_id: int, keyword: str, platform: str) -> CreationTask:
+    """
+    批量任务用的单篇生成（非流式，直接跑完 LangGraph 整张图）。
+
+    【与 stream_generate 的区别】
+    - stream_generate：流式（SSE 逐段推送），用于交互式创作
+    - generate_one_article：一次性跑完，返回最终结果，用于后台批量任务
+
+    【执行流程】
+    1. 生成选题（自动取第一个，批量场景不需要用户选择）
+    2. 初始化 LangGraph 状态 → app.invoke 跑完整张图（非流式）
+    3. 落库 creation_tasks（与交互式创作共用历史记录）
+
+    :param db: 数据库会话
+    :param user_id: 用户 ID
+    :param keyword: 本篇关键词
+    :param platform: 目标平台
+    :return: 已落库的 CreationTask（status=2 成功 / 3 失败，带 error_message）
+    """
+    # ---------- 1. 创建任务记录 ----------
+    task = CreationTask(
+        user_id=user_id,
+        keyword=keyword,
+        platform=platform,
+        selected_title=keyword,  # 批量场景：用关键词作为初始标题（选题生成后覆盖）
+        status=1,
+        current_step="init",
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    try:
+        # ---------- 2. 生成选题（自动取第一个） ----------
+        topics = topic_agent.generate_topics(keyword, platform)
+        if not topics:
+            raise BizException("选题生成失败", status_code=502)
+        topic = topics[0]
+
+        # ---------- 3. 初始化 LangGraph 状态并整图执行 ----------
+        config = {"configurable": {"thread_id": f"batch-task-{task.id}"}}
+        initial_state = {
+            "keyword": keyword,
+            "platform": platform,
+            "selected_title": topic.get("title", keyword),
+            "topics": topics,
+            "user_id": user_id,
+            "task_id": task.id,
+            "retry_count": 0,
+        }
+        # invoke：一次性跑完所有节点（阻塞直到结束，返回最终状态）
+        final_state = app.invoke(initial_state, config=config)
+
+        # ---------- 4. 读取终态并落库 ----------
+        content = final_state.get("final_content", "")
+        if not content:
+            raise BizException("生成内容为空", status_code=502)
+
+        task.status = 2
+        task.selected_title = final_state.get("topic", {}).get("title", keyword)
+        task.content = content
+        task.quality_score = final_state.get("quality_score", 0)
+        task.sensitive_report = json.dumps(
+            final_state.get("sensitive_report", {}), ensure_ascii=False
+        )
+        task.completed_at = datetime.now()
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return task
+
+    except Exception as exc:
+        # 任何环节失败：标记失败并记录原因（批量任务继续跑下一篇）
+        logger.error("批量单篇生成失败 keyword=%s: %s", keyword, exc)
+        task.status = 3
+        task.error_message = str(exc)[:200]
+        db.add(task)
+        db.commit()
+        return task

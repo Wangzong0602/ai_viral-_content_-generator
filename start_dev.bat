@@ -16,6 +16,10 @@ if errorlevel 1 (
     echo [Redis] 已在 16379 端口运行
 )
 
+REM 启动 Celery worker（批量内容生成任务队列，Windows 用 threads 池）
+echo [Celery] 启动批量任务 worker (threads pool, 并发 2)
+start "celery-worker" /B "E:\miniconda3\envs\fastapi_env\python.exe" -m celery -A app.tasks.celery_app worker --pool=threads --concurrency=2 -l info
+
 echo [服务] 启动 FastAPI (http://127.0.0.1:8001)
 echo [文档] http://127.0.0.1:8001/docs
 echo.

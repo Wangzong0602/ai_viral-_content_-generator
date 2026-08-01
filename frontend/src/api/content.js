@@ -56,3 +56,23 @@ export function analyzeArticle(inputText) {
     { timeout: 120000 } // 分析需 10-30 秒，长超时
   )
 }
+
+// 批量内容生成
+// 创建批量任务：keywords_text 支持每行一个或逗号/分号分隔
+export function createBatch(name, platform, keywordsText) {
+  return request.post('/api/v1/content/batch', {
+    name,
+    platform,
+    keywords_text: keywordsText,
+  })
+}
+
+// 批量任务列表
+export function getBatches(limit = 20) {
+  return request.get('/api/v1/content/batch', { params: { limit } })
+}
+
+// 批量任务详情（含每篇状态，轮询进度用）
+export function getBatchDetail(id) {
+  return request.get(`/api/v1/content/batch/${id}`)
+}

@@ -29,6 +29,12 @@ const routes = [
     component: () => import('../views/History.vue'), // 历史记录页
     meta: { title: '历史记录', requiresAuth: true },
   },
+  {
+    path: '/batch',
+    name: 'batch',
+    component: () => import('../views/Batch.vue'), // 批量生成页
+    meta: { title: '批量生成', requiresAuth: true },
+  },
 ]
 
 const router = createRouter({
