@@ -43,8 +43,22 @@
             <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
           </el-select>
           <el-button type="primary" size="large" :loading="loadingTopics" :disabled="generating" @click="startGenerate">
-            一键生成爆文
+            {{ generateBtnText }}
           </el-button>
+        </div>
+
+        <!-- 多平台生成选项（首屏可见，生成前就能决定） -->
+        <div class="multi-platform-row">
+          <span class="multi-platform-label">📦 同时生成以下平台版本：</span>
+          <el-checkbox-group v-model="multiPlatforms" :disabled="generating">
+            <el-checkbox v-for="p in platforms" :key="p" :value="p" :disabled="p === platform">
+              {{ p }}
+            </el-checkbox>
+          </el-checkbox-group>
+          <span v-if="multiPlatforms.length" class="multi-platform-hint">
+            将生成 {{ platform }} 主版本 + {{ multiPlatforms.length }} 个平台版本（共 {{ multiPlatforms.length + 1 }} 篇）
+          </span>
+          <span v-else class="multi-platform-hint">不选择则只生成 {{ platform }} 单篇</span>
         </div>
 
         <!-- 选题展示（两步分离：生成后停留，用户自己选择再开始创作） -->
@@ -75,7 +89,7 @@
           <!-- 开始创作按钮：用户确认选题后触发 -->
           <div class="topics-action">
             <el-button type="primary" size="large" :loading="generating" @click="startStreamGeneration">
-              🚀 用「{{ selectedTopic?.title || '第1个' }}」开始创作
+              🚀 用「{{ selectedTopic?.title || '第1个' }}」开始创作{{ multiPlatforms.length ? `（${multiPlatforms.length + 1} 平台）` : '' }}
             </el-button>
             <el-button size="large" :disabled="generating" @click="resetAll">🔄 换个主题</el-button>
           </div>
@@ -311,7 +325,7 @@
 // 2. 自动选第 1 个 → EventSource 连接 /content/generate（SSE 流式）
 // 3. 实时渲染：进度事件（步骤条）+ content 事件（打字机）
 // 4. 完成后展示结果：复制 / 导出 Markdown / 导出纯文本
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -326,6 +340,18 @@ const userStore = useUserStore()
 const platforms = ['小红书', '公众号', '知乎']
 const keyword = ref('')
 const platform = ref('小红书')
+// 首屏多平台选项：生成前选择"同时生成哪些平台版本"（排除主平台本身）
+const multiPlatforms = ref([])
+
+// 生成按钮文案：根据是否选多平台动态变化
+const generateBtnText = computed(() =>
+  multiPlatforms.value.length ? `🚀 一键生成 ${multiPlatforms.value.length + 1} 平台爆文` : '🚀 一键生成爆文'
+)
+
+// 主平台切换时：如果新主平台已在多平台列表里，自动移除（避免重复生成同一平台）
+watch(platform, (newVal) => {
+  multiPlatforms.value = multiPlatforms.value.filter((p) => p !== newVal)
+})
 
 // 阶段：input=输入  topics=选题  generating=生成中  result=结果
 const phase = ref('input')
@@ -507,7 +533,14 @@ function startStreamGeneration() {
     streaming.value = false
     phase.value = 'result'
     es.value.close()
-    ElMessage.success('创作完成！')
+
+    // 首屏选了多平台 → 主版本完成后【自动】在同一轮任务里生成其他平台版本
+    if (multiPlatforms.value.length) {
+      ElMessage.success('主版本创作完成，正在生成多平台版本...')
+      autoAdapt()
+    } else {
+      ElMessage.success('创作完成！')
+    }
   })
 
   // 监听 error 事件（后端生成失败）
@@ -687,6 +720,7 @@ async function regenerateImage(img, index) {
 }
 
 // ---------- 多平台适配 ----------
+// 手动模式：结果页手动选择平台再生成
 async function handleAdapt() {
   if (!finalContent.value) {
     ElMessage.warning('请先生成文章内容')
@@ -696,13 +730,24 @@ async function handleAdapt() {
     ElMessage.warning('请至少选择一个目标平台')
     return
   }
+  await runAdapt([...adaptPlatforms.value])
+}
+
+// 自动模式：首屏选了多平台，主版本生成完后自动调用（同一轮任务）
+async function autoAdapt() {
+  if (!finalContent.value || !multiPlatforms.value.length) return
+  await runAdapt([...multiPlatforms.value])
+}
+
+// 共享的适配执行逻辑
+async function runAdapt(targets) {
   adaptLoading.value = true
   adaptResults.value = []
   try {
-    const data = await adaptContent(finalContent.value, [...adaptPlatforms.value])
+    const data = await adaptContent(finalContent.value, targets)
     adaptResults.value = data.results || []
     const okCount = adaptResults.value.filter((r) => r.success).length
-    ElMessage.success(`多平台适配完成：${okCount}/${adaptResults.value.length} 个平台成功`)
+    ElMessage.success(`多平台版本生成完成：${okCount}/${adaptResults.value.length} 个平台成功`)
   } catch (e) {
     // 错误已由 axios 拦截器统一提示
   } finally {
@@ -766,6 +811,7 @@ function resetAll() {
   images.value = []
   adaptPlatforms.value = []
   adaptResults.value = []
+  multiPlatforms.value = [] // 重置首屏多平台选项
   generating.value = false
   phase.value = 'input'
 }
@@ -839,6 +885,30 @@ function handleUserCommand(command) {
 .input-row {
   display: flex;
   gap: 12px;
+}
+
+/* 首屏多平台选项 */
+.multi-platform-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: #f5f9ff;
+  border: 1px dashed #a0cfff;
+  border-radius: 8px;
+}
+
+.multi-platform-label {
+  font-size: 14px;
+  color: #409eff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.multi-platform-hint {
+  font-size: 12px;
+  color: #909399;
 }
 
 /* 选题列表 */
