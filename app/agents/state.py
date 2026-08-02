@@ -48,6 +48,8 @@ class CreationState(TypedDict):
     topics: list[dict]  # 选题列表（含完整信息：标题/简介/目标人群/预期效果）
     user_id: int  # 当前用户 ID（落库用）
     task_id: int  # 创作任务 ID（落库用）
+    # 内容模板结构要求（可选：用户选了模板时注入，逻辑分析/创作节点读取）
+    template_structure: NotRequired[str]
 
     # ============ 2. 节点产出（各智能体的输出） ============
     topic: dict  # 解析出的用户所选选题（resolve_topic 节点产出）

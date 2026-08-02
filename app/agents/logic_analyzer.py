@@ -58,20 +58,28 @@ LOGIC_ANALYZER_PROMPT = """
 """
 
 
-def analyze_logic(topic: dict, platform: str) -> dict:
+def analyze_logic(topic: dict, platform: str, template_structure: str = "") -> dict:
     """
     分析爆文逻辑，输出创作策略报告。
 
     :param topic: 用户选择的选题（含 title/summary/target_audience）
     :param platform: 目标平台
+    :param template_structure: 内容模板结构要求（可选，让拆解贴合模板）
     :return: 爆文逻辑报告字典（含 title_hook/opening_3s/content_structure/emotion_points/seo_keywords）
     """
+    # 模板结构注入
+    template_part = ""
+    if template_structure:
+        template_part = f"""
+【用户选择的模板结构要求】（内容结构需遵循该模板）
+{template_structure}
+"""
     user_prompt = f"""
 【用户选题】
 - 标题：{topic.get('title', '')}
 - 简介：{topic.get('summary', '')}
 - 目标平台：{platform}
-
+{template_part}
 请拆解这个选题的爆文逻辑，输出创作策略报告。
 """
     text = chat(

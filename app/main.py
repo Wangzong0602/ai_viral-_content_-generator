@@ -24,7 +24,7 @@ from fastapi.openapi.docs import get_swagger_ui_html  # 生成 Swagger 页面 HT
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles  # 托管静态文件
 
-from app.api.v1 import auth, batch, content, dashboard, image, user  # 导入路由模块（注册路由时用到）
+from app.api.v1 import auth, batch, content, dashboard, image, template, user  # 导入路由模块（注册路由时用到）
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logger import logger
@@ -49,9 +49,21 @@ async def lifespan(app: FastAPI):
 
     当前在启动时：
     - 确保图片存储目录存在（挂载静态目录前必须先创建）
+    - 初始化内容模板种子数据（首次启动时写入）
     """
     IMAGE_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("应用启动完成, 图片存储目录=%s", IMAGE_STORAGE_DIR)
+
+    # 初始化内容模板种子数据（幂等：表空时才插入）
+    from app.db.session import SessionLocal
+    from app.services.template_service import init_seed_templates
+
+    seed_db = SessionLocal()
+    try:
+        init_seed_templates(seed_db)
+    finally:
+        seed_db.close()
+
     yield
     logger.info("应用关闭")
 
@@ -116,6 +128,7 @@ app.include_router(content.router)
 app.include_router(image.router)
 app.include_router(batch.router)
 app.include_router(dashboard.router)
+app.include_router(template.router)
 
 
 @app.get("/")

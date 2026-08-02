@@ -62,6 +62,33 @@
           <span v-else class="multi-platform-hint">不选择则只生成 {{ platform }} 单篇</span>
         </div>
 
+        <!-- 内容模板选择（可选，按当前平台联动过滤） -->
+        <div class="template-row">
+          <span class="template-label">📋 内容模板：</span>
+          <el-select
+            v-model="selectedTemplateId"
+            placeholder="不选模板（默认）"
+            clearable
+            size="default"
+            style="width: 260px"
+            :disabled="generating"
+          >
+            <el-option
+              v-for="t in templates"
+              :key="t.id"
+              :label="t.name"
+              :value="t.id"
+            >
+              <span>{{ t.name }}</span>
+              <span class="template-desc">{{ t.description }}</span>
+            </el-option>
+          </el-select>
+          <span v-if="selectedTemplateId && selectedTemplate" class="template-hint">
+            {{ selectedTemplate.description }}
+          </span>
+          <span class="template-hint-muted">按爆款结构生成（可选）</span>
+        </div>
+
         <!-- 选题展示（两步分离：生成后停留，用户自己选择再开始创作） -->
         <div v-if="topics.length" class="topics-section">
           <div class="topics-title">
@@ -331,7 +358,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
-import { generateTopics, generateImages, adaptContent, analyzeArticle } from '../api/content'
+import { generateTopics, generateImages, adaptContent, analyzeArticle, getTemplates } from '../api/content'
 
 const route = useRoute()
 const router = useRouter()
@@ -352,7 +379,28 @@ const generateBtnText = computed(() =>
 // 主平台切换时：如果新主平台已在多平台列表里，自动移除（避免重复生成同一平台）
 watch(platform, (newVal) => {
   multiPlatforms.value = multiPlatforms.value.filter((p) => p !== newVal)
+  loadTemplates(newVal) // 联动加载对应平台的模板
 })
+
+// ---------- 内容模板 ----------
+const templates = ref([]) // 模板列表（按平台过滤）
+const selectedTemplateId = ref(null) // 选中的模板 ID
+const selectedTemplate = computed(
+  () => templates.value.find((t) => t.id === selectedTemplateId.value) || null
+)
+
+// 加载当前平台的模板列表
+async function loadTemplates(platformName) {
+  try {
+    templates.value = await getTemplates(platformName)
+    // 模板变了，若当前选中不在新列表则清空
+    if (selectedTemplateId.value && !templates.value.some((t) => t.id === selectedTemplateId.value)) {
+      selectedTemplateId.value = null
+    }
+  } catch (e) {
+    templates.value = []
+  }
+}
 
 // 阶段：input=输入  topics=选题  generating=生成中  result=结果
 const phase = ref('input')
@@ -427,6 +475,9 @@ const progressTagType = computed(() =>
 // 头像文字（昵称首字符）
 const avatarText = computed(() => (userStore.nickname || '用').charAt(0))
 
+// 初始加载当前平台的模板列表
+loadTemplates(platform.value)
+
 // 从历史记录"复用"跳转过来时：预填关键词并自动开始生成
 // URL 格式：/?keyword=xxx&platform=小红书&auto=1
 if (route.query.keyword) {
@@ -471,7 +522,7 @@ async function startGenerate() {
   loadingTopics.value = true
   try {
     // 第一步：生成选题
-    const data = await generateTopics(keyword.value.trim(), platform.value)
+    const data = await generateTopics(keyword.value.trim(), platform.value, selectedTemplateId.value)
     topics.value = data.topics || []
     if (!topics.value.length) {
       ElMessage.error('选题生成失败，请重试')
@@ -506,6 +557,10 @@ function startStreamGeneration() {
     selected_title: selectedTopic.value.title,
     token: token,
   })
+  // 模板 ID（可选，注入创作流程）
+  if (selectedTemplateId.value) {
+    params.append('template_id', selectedTemplateId.value)
+  }
 
   // 创建 EventSource 连接
   es.value = new EventSource(`/api/v1/content/generate?${params}`)
@@ -909,7 +964,42 @@ function handleUserCommand(command) {
 
 .multi-platform-hint {
   font-size: 12px;
-  color: #909399;
+  color: #6b7280;
+}
+
+/* 内容模板选择 */
+.template-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.template-label {
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.template-desc {
+  float: right;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.template-hint {
+  font-size: 12px;
+  color: #16a34a;
+}
+
+.template-hint-muted {
+  font-size: 12px;
+  color: #9ca3af;
 }
 
 /* 选题列表 */

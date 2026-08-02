@@ -53,15 +53,47 @@ NODE_NAMES = {
 }
 
 
-def get_topics(keyword: str, platform: str) -> dict:
+def get_topics(keyword: str, platform: str, template_structure: str = "") -> dict:
     """
     第一步：根据关键词生成 5 个爆款选题。
 
     选题生成是"独立的交互步骤"（用户要先选择），
     不进入 LangGraph 状态机（状态机从"选题已确定"开始跑）。
+
+    :param keyword: 主题/关键词
+    :param platform: 目标平台
+    :param template_structure: 内容模板结构要求（可选）
     """
-    topics = topic_agent.generate_topics(keyword, platform)
+    topics = topic_agent.generate_topics(keyword, platform, template_structure)
     return {"keyword": keyword, "platform": platform, "topics": topics}
+
+
+def _get_template_structure(db: Session, template_id: int | None) -> str:
+    """
+    根据模板 ID 获取结构要求文本（JSON 转可读文本）。
+
+    :param db: 数据库会话
+    :param template_id: 模板 ID（可选）
+    :return: 模板结构描述文本（无模板时返回空串）
+    """
+    if not template_id:
+        return ""
+    from app.services.template_service import get_template
+
+    template = get_template(db, template_id)
+    if not template:
+        return ""
+    try:
+        structure = json.loads(template.structure or "{}")
+    except json.JSONDecodeError:
+        return ""
+    # 转成可读文本（hook/opening/body/cta）
+    parts = []
+    labels = {"hook": "标题钩子", "opening": "开头", "body": "正文结构", "cta": "结尾行动召唤"}
+    for key, label in labels.items():
+        if structure.get(key):
+            parts.append(f"{label}：{structure[key]}")
+    return "\n".join(parts)
 
 
 def _make_progress(node_name: str, status: str, detail: str = "") -> dict:
@@ -84,6 +116,7 @@ def stream_generate(
     platform: str,
     selected_title: str,
     topics: list[dict],
+    template_id: int | None = None,
 ):
     """
     完整创作流水线（生成器）：LangGraph 状态机执行 + SSE 事件输出。
@@ -115,6 +148,9 @@ def stream_generate(
     # thread_id：每个任务一个唯一会话 ID（检查点隔离 + 断点续跑基础）
     config = {"configurable": {"thread_id": f"task-{task.id}"}}
 
+    # 模板结构注入（用户选了模板时生效）
+    template_structure = _get_template_structure(db, template_id)
+
     # ---------- 2. 构造初始状态（图输入） ----------
     initial_state = {
         "keyword": keyword,
@@ -124,6 +160,7 @@ def stream_generate(
         "user_id": user_id,
         "task_id": task.id,
         "retry_count": 0,  # 重试计数从 0 开始
+        "template_structure": template_structure,  # 模板结构（可为空串）
     }
 
     try:

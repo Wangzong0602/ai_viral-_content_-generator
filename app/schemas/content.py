@@ -27,6 +27,8 @@ class CreateRequest(BaseModel):
     platform: str = Field(..., description="目标平台（小红书/公众号/知乎）")
     step: str = Field(default="topics", description="topics=生成选题 full=完整创作")
     selected_title: str | None = Field(default=None, max_length=500, description="用户选择的选题标题")
+    # 内容模板 ID（可选）：选择模板后，把模板结构注入智能体提示词
+    template_id: int | None = Field(default=None, description="内容模板 ID（可选）")
 
     def validate_platform(self) -> None:
         """校验平台是否支持（调用方在路由里手动调用）。"""

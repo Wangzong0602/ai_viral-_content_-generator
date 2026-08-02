@@ -82,8 +82,9 @@ def logic_analyzer_node(state: CreationState) -> dict:
     """
     topic = state.get("topic", {})
     platform = state["platform"]
-    # analyze_logic 返回字典；解析失败时返回 {}，由下游兜底
-    report = analyze_logic(topic, platform)
+    # 模板结构注入（用户选了模板时生效，让逻辑分析贴合模板）
+    template_structure = state.get("template_structure", "")
+    report = analyze_logic(topic, platform, template_structure)
     return {
         "logic_report": report,
         "current_step": "logic_analyzer",

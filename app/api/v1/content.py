@@ -78,7 +78,9 @@ def generate_topics(
     前端拿到列表后展示给用户，用户点选一个再触发"完整创作"。
     """
     data.validate_platform()  # 校验平台是否支持
-    result = content_service.get_topics(data.keyword, data.platform)
+    # 模板结构注入（用户选了模板时，让选题贴合模板）
+    template_structure = content_service._get_template_structure(db, data.template_id)
+    result = content_service.get_topics(data.keyword, data.platform, template_structure)
     if not result["topics"]:
         # 模型解析失败等异常情况：给前端明确提示而不是空列表
         raise HTTPException(
@@ -94,6 +96,7 @@ def generate(
     platform: str = Query(..., description="目标平台"),
     selected_title: str = Query(..., description="用户选择的选题标题"),
     token: str = Query(..., description="JWT 令牌（EventSource 无法带请求头，用 URL 参数）"),
+    template_id: int | None = Query(default=None, description="内容模板 ID（可选）"),
     db: Session = Depends(get_db),
 ):
     """
@@ -133,6 +136,7 @@ def generate(
     req.validate_platform()
 
     # 先取一次选题列表（确保 topic 有完整信息：标题/简介/目标人群）
+    # 注意：这里不注入模板（选题已在 topics 接口生成时用模板了），保持一致
     topics_result = content_service.get_topics(keyword, platform)
     topics = topics_result["topics"]
     if not topics:
@@ -151,6 +155,7 @@ def generate(
             platform=platform,
             selected_title=selected_title,
             topics=topics,
+            template_id=template_id,  # 模板结构注入（逻辑分析/创作节点）
         ):
             event = item["event"]
             data = item["data"]

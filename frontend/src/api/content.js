@@ -3,9 +3,9 @@
 // 生成流程用浏览器原生 EventSource 实现（见 Workspace.vue）
 import request from '../utils/request'
 
-// 生成选题：输入关键词 + 平台，返回 5 个选题
-export function generateTopics(keyword, platform) {
-  return request.post('/api/v1/content/topics', { keyword, platform })
+// 生成选题：输入关键词 + 平台，返回 5 个选题（templateId 可选）
+export function generateTopics(keyword, platform, templateId = null) {
+  return request.post('/api/v1/content/topics', { keyword, platform, template_id: templateId })
 }
 
 // 历史记录列表（支持筛选：platform 平台 / keyword 搜索 / favorite 只看收藏）
@@ -92,4 +92,9 @@ export function getBatchDetail(id) {
 // 返回 { summary, trend, platforms, quality_dist }
 export function getDashboardOverview(days = 30) {
   return request.get('/api/v1/dashboard/overview', { params: { days } })
+}
+
+// 内容模板列表（可按平台过滤）
+export function getTemplates(platform = '') {
+  return request.get('/api/v1/content/templates', { params: { platform } })
 }
