@@ -116,6 +116,7 @@ class UserOut(UserBase):
 
     id: int
     status: int
+    is_admin: int = 0  # 是否管理员（1=管理员 0=普通用户，前端控制后台入口显示）
     created_at: datetime
     updated_at: datetime
 
@@ -135,6 +136,7 @@ class UserOut(UserBase):
             avatar=user.avatar,
             bio=user.bio,
             status=user.status,
+            is_admin=user.is_admin,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )

@@ -37,39 +37,39 @@ def main() -> None:
     conn = pymysql.connect(**DB_CONFIG)
     try:
         with conn.cursor() as cur:
-            # 统计将要删除的数据量
+            # 统计将要删除的数据量（排除管理员账号，防止误删）
             cur.execute(
-                "SELECT COUNT(*) FROM users WHERE phone LIKE %s",
+                "SELECT COUNT(*) FROM users WHERE phone LIKE %s AND is_admin != 1",
                 (f"{TEST_PHONE_PREFIX}%",),
             )
             user_count = cur.fetchone()[0]
             cur.execute(
                 """SELECT COUNT(*) FROM creation_tasks
                    WHERE user_id IN (
-                       SELECT id FROM users WHERE phone LIKE %s
+                       SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
                    )""",
                 (f"{TEST_PHONE_PREFIX}%",),
             )
             task_count = cur.fetchone()[0]
 
             print(f"将删除测试数据：{user_count} 个用户、{task_count} 条创作记录")
-            print(f"（仅限手机号 {TEST_PHONE_PREFIX} 开头，真实账号不受影响）")
+            print(f"（仅限手机号 {TEST_PHONE_PREFIX} 开头且非管理员，真实账号不受影响）")
             confirm = input("确认删除？输入 y 继续，其他任意键取消: ").strip().lower()
             if confirm != "y":
                 print("已取消，未删除任何数据")
                 return
 
-            # 先删创作记录（外键依赖），再删用户
+            # 先删创作记录（外键依赖），再删用户（均排除管理员）
             cur.execute(
                 """DELETE FROM creation_tasks
                    WHERE user_id IN (
-                       SELECT id FROM users WHERE phone LIKE %s
+                       SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
                    )""",
                 (f"{TEST_PHONE_PREFIX}%",),
             )
             deleted_tasks = cur.rowcount
             cur.execute(
-                "DELETE FROM users WHERE phone LIKE %s",
+                "DELETE FROM users WHERE phone LIKE %s AND is_admin != 1",
                 (f"{TEST_PHONE_PREFIX}%",),
             )
             deleted_users = cur.rowcount

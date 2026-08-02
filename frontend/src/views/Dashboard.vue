@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <!-- 数据看板页：创作统计概览 + 趋势/平台/质量图表 -->
   <div class="dashboard-page">
     <!-- 顶部导航栏（与工作台一致） -->
@@ -9,7 +9,7 @@
           <el-menu-item index="/">创作工作台</el-menu-item>
           <el-menu-item index="/batch">批量生成</el-menu-item>
           <el-menu-item index="/dashboard">数据看板</el-menu-item>
-          <el-menu-item index="/history">历史记录</el-menu-item>
+          <el-menu-item index="/history">历史记录</el-menu-item>`n          <el-menu-item v-if="userStore.user?.is_admin === 1" index="/admin">后台管理</el-menu-item>
         </el-menu>
       </div>
       <div class="header-right">

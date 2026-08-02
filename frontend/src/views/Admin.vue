@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <!-- 后台管理页（仅管理员）：左侧菜单 + 内容区（统计/用户/内容） -->
   <div class="admin-page">
     <header class="header">
@@ -9,7 +9,7 @@
           <el-menu-item index="/batch">批量生成</el-menu-item>
           <el-menu-item index="/dashboard">数据看板</el-menu-item>
           <el-menu-item index="/history">历史记录</el-menu-item>
-          <el-menu-item index="/admin">后台管理</el-menu-item>
+          <el-menu-item v-if="userStore.user?.is_admin === 1" index="/admin">后台管理</el-menu-item>
         </el-menu>
       </div>
       <div class="header-right">
