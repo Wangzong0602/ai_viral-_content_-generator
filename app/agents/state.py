@@ -50,6 +50,8 @@ class CreationState(TypedDict):
     task_id: int  # 创作任务 ID（落库用）
     # 内容模板结构要求（可选：用户选了模板时注入，逻辑分析/创作节点读取）
     template_structure: NotRequired[str]
+    # 联网搜索到的真实事实背景（可选：题材涉及真实事件时注入，防虚构）
+    fact_context: NotRequired[str]
 
     # ============ 2. 节点产出（各智能体的输出） ============
     topic: dict  # 解析出的用户所选选题（resolve_topic 节点产出）
@@ -61,6 +63,8 @@ class CreationState(TypedDict):
     # 质量检查结果
     sensitive_report: dict  # 敏感词报告 {"has_sensitive": bool, "words": [...]}
     quality_score: int  # 质量分 0-100
+    # 事实核查报告（方案1）：{"checked", "risk_level", "claims", "warning"}
+    fact_check_report: NotRequired[dict]
 
     # ============ 3. 流程控制 ============
     # 当前执行到哪个节点（写日志/落库进度用）

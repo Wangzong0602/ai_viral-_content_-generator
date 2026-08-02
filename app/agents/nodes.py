@@ -115,13 +115,21 @@ def content_writer_node(state: CreationState, writer: StreamWriter) -> dict:
     topic = state.get("topic", {})
     logic_report = state.get("logic_report", {})
     platform = state["platform"]
+    # 联网搜索到的真实事实背景（方案2：防虚构，创作时必须基于这些事实）
+    fact_context = state.get("fact_context", "")
+    fact_part = ""
+    if fact_context:
+        fact_part = f"""
+【联网搜索到的真实事实（必须严格基于这些事实写作，禁止虚构）】
+{fact_context}
+"""
 
     user_prompt = f"""
 【选题信息】
 - 标题：{topic.get('title', '')}
 - 简介：{topic.get('summary', '')}
 - 目标平台：{platform}
-
+{fact_part}
 【爆文逻辑报告】
 标题钩子：{logic_report.get('title_hook', '')}
 开头策略：{logic_report.get('opening_3s', '')}
@@ -209,6 +217,50 @@ def quality_checker_node(state: CreationState) -> dict:
         "sensitive_report": report,
         "quality_score": score,
         "current_step": "quality_checker",
+    }
+
+
+# ============================================================
+# 节点 6.5：事实核查（fact_checker）
+# ============================================================
+def fact_checker_node(state: CreationState) -> dict:
+    """
+    事实核查：检测生成内容中的事实断言，联网核对（方案1）。
+
+    【为什么要核查？】
+    大模型可能虚构人名/事件/数据（幻觉），商用发布虚假信息有风险。
+    本节点提取断言 → 联网核对 → 输出风险报告，
+    前端根据风险等级展示警告条（高风险必须人工核实）。
+
+    【性能考虑】
+    只对"事实敏感"题材执行完整核查（见 fact_check_service.is_fact_sensitive），
+    避免所有创作都做联网搜索（成本与延迟控制）。
+    """
+    from app.services.fact_check_service import fact_check, is_fact_sensitive
+
+    content = state.get("final_content", "")
+    keyword = state.get("keyword", "")
+
+    # 非敏感题材：跳过完整核查（降低延迟），只返回空报告
+    if not is_fact_sensitive(keyword) and not is_fact_sensitive(content[:200]):
+        return {
+            "fact_check_report": {
+                "checked": False,
+                "risk_level": "low",
+                "claims": [],
+                "warning": "",
+            },
+            "current_step": "fact_checker",
+        }
+
+    # 敏感题材：执行完整核查（提取断言 → 联网核对）
+    # 注意：这里用同步调用包一层（节点内直接 await 不行，LangGraph 同步图）
+    import asyncio
+
+    report = asyncio.run(fact_check(content))
+    return {
+        "fact_check_report": report,
+        "current_step": "fact_checker",
     }
 
 

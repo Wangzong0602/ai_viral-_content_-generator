@@ -34,6 +34,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.nodes import (
     content_writer_node,
+    fact_checker_node,
     layout_agent_node,
     logic_analyzer_node,
     polish_agent_node,
@@ -69,7 +70,7 @@ def _should_retry(state: CreationState) -> str:
     has_sensitive = report.get("has_sensitive", False)
     if has_sensitive and state.get("retry_count", 0) < MAX_QUALITY_RETRIES:
         return "revise"
-    return END
+    return "fact_checker"  # 质量通过 → 进入事实核查（方案1）
 
 
 def build_graph() -> StateGraph:
@@ -103,6 +104,7 @@ def build_graph() -> StateGraph:
     workflow.add_node("polish_agent", polish_agent_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("layout_agent", layout_agent_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("quality_checker", quality_checker_node, retry=NODE_RETRY_POLICY)
+    workflow.add_node("fact_checker", fact_checker_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("revise", revise_node, retry=NODE_RETRY_POLICY)
 
     # ---------- 4. 连接边（定义主流程） ----------
@@ -114,17 +116,20 @@ def build_graph() -> StateGraph:
     workflow.add_edge("layout_agent", "quality_checker")
 
     # ---------- 5. 条件边（质量审核闭环） ----------
-    # quality_checker 完成后调用 _should_retry 决定去向
+    # quality_checker 完成后调用 _should_retry 决定去向：
+    # 有敏感词 → revise 重写；通过 → 进入事实核查（方案1）
     workflow.add_conditional_edges(
         "quality_checker",
         _should_retry,
         {
             "revise": "revise",  # 有敏感词 → 重写
-            END: END,  # 通过 → 结束
+            "fact_checker": "fact_checker",  # 通过 → 事实核查
         },
     )
     # 重写完成后回到 quality_checker 重新审核（形成循环）
     workflow.add_edge("revise", "quality_checker")
+    # 事实核查完成后结束
+    workflow.add_edge("fact_checker", END)
 
     # ---------- 6. 编译成可执行应用 ----------
     # checkpointer= 启用持久化；之后调用 app.stream/ainvoke 即可执行

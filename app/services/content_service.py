@@ -53,7 +53,7 @@ NODE_NAMES = {
 }
 
 
-def get_topics(keyword: str, platform: str, template_structure: str = "") -> dict:
+def get_topics(keyword: str, platform: str, template_structure: str = "", fact_context: str = "") -> dict:
     """
     第一步：根据关键词生成 5 个爆款选题。
 
@@ -63,9 +63,41 @@ def get_topics(keyword: str, platform: str, template_structure: str = "") -> dic
     :param keyword: 主题/关键词
     :param platform: 目标平台
     :param template_structure: 内容模板结构要求（可选）
+    :param fact_context: 联网搜索到的真实事实背景（可选，防虚构）
     """
-    topics = topic_agent.generate_topics(keyword, platform, template_structure)
+    topics = topic_agent.generate_topics(keyword, platform, template_structure, fact_context)
     return {"keyword": keyword, "platform": platform, "topics": topics}
+
+
+def search_facts(keyword: str) -> str:
+    """
+    方案2：题材涉及真实事件时，联网搜索真实事实供创作参考。
+
+    只对"事实敏感"题材触发（含获奖/人名/新闻等关键词），
+    避免所有创作都做搜索（成本与延迟控制）。
+
+    :param keyword: 用户输入的关键词/主题
+    :return: 搜索到的事实文本（非敏感题材返回空串）
+    """
+    from app.services.fact_check_service import is_fact_sensitive
+    from app.services.ai_service import chat_with_search
+
+    if not is_fact_sensitive(keyword):
+        return ""
+    try:
+        facts = chat_with_search(
+            user_prompt=(
+                f"请搜索关于「{keyword}」的真实事实信息，"
+                "输出要点：涉及的真实人名/机构/事件/时间/数据。"
+                "只输出搜索到的客观事实，不要推测。"
+            ),
+            system_prompt="你是资料检索员，只输出联网搜索到的真实信息。",
+            max_tokens=1500,
+        )
+        return facts
+    except Exception as exc:
+        logger.warning("事实搜索失败 keyword=%s: %s", keyword, exc)
+        return ""
 
 
 def _get_template_structure(db: Session, template_id: int | None) -> str:
@@ -151,6 +183,9 @@ def stream_generate(
     # 模板结构注入（用户选了模板时生效）
     template_structure = _get_template_structure(db, template_id)
 
+    # 方案2：题材敏感时，联网搜索真实事实（创作前注入，防虚构）
+    fact_context = search_facts(keyword)
+
     # ---------- 2. 构造初始状态（图输入） ----------
     initial_state = {
         "keyword": keyword,
@@ -161,6 +196,7 @@ def stream_generate(
         "task_id": task.id,
         "retry_count": 0,  # 重试计数从 0 开始
         "template_structure": template_structure,  # 模板结构（可为空串）
+        "fact_context": fact_context,  # 真实事实背景（可为空串）
     }
 
     try:
@@ -199,6 +235,8 @@ def stream_generate(
         report = final_state.get("sensitive_report", {})
         score = final_state.get("quality_score", 0)
         retries = final_state.get("retry_count", 0)
+        # 方案1：事实核查报告（可能为空）
+        fact_check = final_state.get("fact_check_report", {})
 
         task.status = 2  # 已完成
         task.content = content
@@ -209,7 +247,7 @@ def stream_generate(
         db.commit()
         db.refresh(task)
 
-        # 完成事件：带最终结果（前端渲染全文）
+        # 完成事件：带最终结果（前端渲染全文 + 事实核查警告）
         yield {
             "event": "complete",
             "data": {
@@ -219,6 +257,7 @@ def stream_generate(
                 "sensitive_report": report,
                 "quality_score": score,
                 "retry_count": retries,
+                "fact_check": fact_check,  # 事实核查报告（前端展示警告条）
             },
         }
 

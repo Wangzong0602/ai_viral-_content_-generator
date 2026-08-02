@@ -80,7 +80,9 @@ def generate_topics(
     data.validate_platform()  # 校验平台是否支持
     # 模板结构注入（用户选了模板时，让选题贴合模板）
     template_structure = content_service._get_template_structure(db, data.template_id)
-    result = content_service.get_topics(data.keyword, data.platform, template_structure)
+    # 方案2：题材敏感时联网搜索真实事实（选题必须基于事实）
+    fact_context = content_service.search_facts(data.keyword)
+    result = content_service.get_topics(data.keyword, data.platform, template_structure, fact_context)
     if not result["topics"]:
         # 模型解析失败等异常情况：给前端明确提示而不是空列表
         raise HTTPException(

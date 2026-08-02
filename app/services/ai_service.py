@@ -32,6 +32,71 @@ ai_client = OpenAI(
 )
 
 
+def chat_with_search(
+    user_prompt: str,
+    system_prompt: str = "你是一个智能助手，请基于搜索结果回答用户问题。",
+    model: str | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 2048,
+) -> str:
+    """
+    联网搜索对话调用（DashScope 原生 SDK + enable_search 顶层参数）。
+
+    【为什么用原生 SDK 而不是 OpenAI 兼容模式？】
+    实测：OpenAI 兼容模式的 extra_body={"enable_search": True} 不生效
+    （模型仍按知识库回答，知识截止 2024）。
+    而 DashScope 原生 Generation.call 的顶层 enable_search=True 参数
+    会真正联网搜索，把实时信息注入回答（实测能正确返回"王虹、邓煜获奖"）。
+
+    【用途（事实真实性保障）】
+    - 创作前：搜索用户题材的真实信息，注入创作提示词（方案2）
+    - 事实核查：让模型基于联网结果核对生成内容中的事实断言（方案1）
+
+    :param user_prompt: 用户问题/待核查内容
+    :param system_prompt: 角色设定
+    :param model: 模型名（默认 qwen-plus）
+    :param temperature: 温度（核查要低，默认 0.3 保证严谨）
+    :param max_tokens: 最大输出
+    :return: 模型回答文本
+    """
+    from dashscope import Generation
+
+    # 联网搜索必须用支持 enable_search 的模型（qwen 系列），
+    # 不能用默认的 DASHSCOPE_MODEL（deepseek-v4-flash 不支持搜索，会返回空）
+    search_model = model or "qwen-plus"
+
+    # 联网搜索偶发返回空（搜索服务不稳定），重试一次
+    for attempt in range(2):
+        resp = Generation.call(
+            api_key=settings.DASHSCOPE_API_KEY,
+            model=search_model,
+            prompt=f"{system_prompt}\n\n{user_prompt}",
+            enable_search=True,  # 关键：顶层参数开启联网搜索
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        if resp.status_code != 200:
+            from app.core.exceptions import BizException
+
+            raise BizException(f"联网搜索调用失败: {resp.message}", status_code=502)
+        text = resp.output.text if resp.output else ""
+        if text and text.strip():
+            return text
+        # 空结果：重试（第二次尝试去掉 system 前缀，避免过长 prompt）
+        if attempt == 0:
+            resp = Generation.call(
+                api_key=settings.DASHSCOPE_API_KEY,
+                model=search_model,
+                prompt=user_prompt,
+                enable_search=True,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            if resp.status_code == 200 and resp.output and resp.output.text:
+                return resp.output.text
+    return ""
+
+
 def chat(
     system_prompt: str,
     user_prompt: str,

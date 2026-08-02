@@ -50,13 +50,14 @@ TOPIC_AGENT_PROMPT = """
 """
 
 
-def generate_topics(keyword: str, platform: str, template_structure: str = "") -> list[dict]:
+def generate_topics(keyword: str, platform: str, template_structure: str = "", fact_context: str = "") -> list[dict]:
     """
     生成 5 个爆款选题方向。
 
     :param keyword: 用户输入的关键词/领域（如"AI工具""健康养生"）
     :param platform: 目标平台（小红书/公众号/知乎）
     :param template_structure: 内容模板结构要求（可选，注入提示词让选题贴合模板）
+    :param fact_context: 联网搜索到的真实事实背景（可选，防虚构）
     :return: 选题列表，格式：
         [{"title": "...", "summary": "...", "target_audience": "...", "expected_effect": "..."}]
         解析失败时返回空列表（调用方展示兜底文案）
@@ -69,12 +70,21 @@ def generate_topics(keyword: str, platform: str, template_structure: str = "") -
 {template_structure}
 """
 
+    # 真实事实注入（题材涉及真实事件时生效，选题必须基于事实）
+    fact_part = ""
+    if fact_context:
+        fact_part = f"""
+【联网搜索到的真实事实】（选题必须基于这些真实信息，禁止虚构）
+{fact_context}
+"""
+
     # 组装用户提示词：把变量嵌入模板（{keyword}、{platform} 会被替换）
     user_prompt = f"""
 【用户输入】
 - 关键词：{keyword}
 - 目标平台：{platform}
 {template_part}
+{fact_part}
 请生成 5 个爆款选题方向。
 """
     # 调用大模型（temperature=0.8：选题需要创意，温度稍高更有发散性）

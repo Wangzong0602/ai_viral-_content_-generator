@@ -172,6 +172,28 @@
           <el-tag type="info" size="small">质量分：{{ qualityScore }}</el-tag>
         </div>
 
+        <!-- 事实核查警告（方案1+3：涉及真实事件时展示风险提示） -->
+        <div v-if="factCheck && factCheck.checked" class="fact-check" :class="`fact-${factCheck.risk_level}`">
+          <div class="fact-warning">
+            {{ factCheck.warning }}
+            <span class="fact-note">AI 生成内容可能存在事实偏差，商用发布前请务必人工核实。</span>
+          </div>
+          <!-- 风险断言清单（高风险/存疑时展示） -->
+          <div v-if="factCheck.claims && factCheck.claims.length" class="fact-claims">
+            <div
+              v-for="(c, i) in factCheck.claims.filter((x) => x.status !== 'supported')"
+              :key="i"
+              class="fact-claim"
+            >
+              <el-tag :type="c.status === 'contradicted' ? 'danger' : 'warning'" size="small" class="fact-tag">
+                {{ c.status === 'contradicted' ? '与事实不符' : '无法核实' }}
+              </el-tag>
+              <span class="fact-claim-text">「{{ c.text }}」</span>
+              <span v-if="c.evidence" class="fact-evidence">{{ c.evidence }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- AI 配图区 -->
         <div class="image-section">
           <div class="image-toolbar">
@@ -422,6 +444,8 @@ const currentTaskId = ref(null) // 当前创作任务的 ID（配图时关联落
 const finalContent = ref('')
 const qualityReport = ref(null)
 const qualityScore = ref(0)
+// 事实核查报告（方案1）：{ checked, risk_level, claims, warning }
+const factCheck = ref(null)
 
 // AI 配图状态
 const images = ref([]) // 配图列表 [{ url, scene, regenerating }]
@@ -584,6 +608,7 @@ function startStreamGeneration() {
     finalContent.value = data.content
     qualityReport.value = data.sensitive_report
     qualityScore.value = data.quality_score
+    factCheck.value = data.fact_check || null // 事实核查报告（方案1）
     currentTaskId.value = data.task_id // 保存任务 ID（配图落库关联用）
     generating.value = false
     streaming.value = false
@@ -864,6 +889,7 @@ function resetAll() {
   streamText.value = ''
   finalContent.value = ''
   qualityReport.value = null
+  factCheck.value = null // 重置事实核查报告
   images.value = []
   adaptPlatforms.value = []
   adaptResults.value = []
@@ -1161,6 +1187,73 @@ function handleUserCommand(command) {
   display: flex;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+/* 事实核查警告条 */
+.fact-check {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.fact-high {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.fact-medium {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.fact-low {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.fact-warning {
+  font-weight: 500;
+}
+
+.fact-note {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+
+.fact-claims {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fact-claim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.fact-tag {
+  flex-shrink: 0;
+}
+
+.fact-claim-text {
+  font-weight: 500;
+}
+
+.fact-evidence {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 /* AI 配图区 */
