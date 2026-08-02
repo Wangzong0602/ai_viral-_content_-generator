@@ -41,6 +41,12 @@ const routes = [
     component: () => import('../views/Dashboard.vue'), // 数据看板
     meta: { title: '数据看板', requiresAuth: true },
   },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('../views/Admin.vue'), // 后台管理（仅管理员）
+    meta: { title: '后台管理', requiresAuth: true },
+  },
 ]
 
 const router = createRouter({

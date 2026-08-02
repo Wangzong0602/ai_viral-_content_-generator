@@ -60,6 +60,8 @@ class User(Base):
     # comment= 参数会把说明写进数据库表注释，方便看表结构
     # 1:正常 2:禁用 3:黑名单（注销）
     status: Mapped[int] = mapped_column(default=1, comment="1:正常 2:禁用 3:黑名单")
+    # 是否管理员（后台管理系统权限）：1=管理员 0=普通用户
+    is_admin: Mapped[int] = mapped_column(default=0, comment="1:管理员 0:普通用户")
 
     # ---------- 时间戳 ----------
     # server_default=func.now()：由数据库在插入时自动填当前时间

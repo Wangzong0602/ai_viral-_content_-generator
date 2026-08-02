@@ -104,3 +104,28 @@ export function getDashboardOverview(days = 30) {
 export function getTemplates(platform = '') {
   return request.get('/api/v1/content/templates', { params: { platform } })
 }
+
+// ============ 后台管理（仅管理员） ============
+export function getAdminStats() {
+  return request.get('/api/v1/admin/stats')
+}
+
+export function getAdminUsers(keyword = '') {
+  return request.get('/api/v1/admin/users', { params: { keyword } })
+}
+
+export function updateUserStatus(id, status) {
+  return request.put(`/api/v1/admin/users/${id}/status`, { status })
+}
+
+export function updateUserAdmin(id, isAdmin) {
+  return request.put(`/api/v1/admin/users/${id}/admin`, null, { params: { is_admin: isAdmin } })
+}
+
+export function getAdminContents(keyword = '', platform = '') {
+  return request.get('/api/v1/admin/contents', { params: { keyword, platform } })
+}
+
+export function deleteAdminContent(id) {
+  return request.delete(`/api/v1/admin/contents/${id}`)
+}
