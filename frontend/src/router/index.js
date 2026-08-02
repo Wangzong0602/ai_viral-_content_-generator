@@ -35,6 +35,12 @@ const routes = [
     component: () => import('../views/Batch.vue'), // 批量生成页
     meta: { title: '批量生成', requiresAuth: true },
   },
+  {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('../views/Dashboard.vue'), // 数据看板
+    meta: { title: '数据看板', requiresAuth: true },
+  },
 ]
 
 const router = createRouter({

@@ -24,7 +24,7 @@ from fastapi.openapi.docs import get_swagger_ui_html  # 生成 Swagger 页面 HT
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles  # 托管静态文件
 
-from app.api.v1 import auth, batch, content, image, user  # 导入路由模块（注册路由时用到）
+from app.api.v1 import auth, batch, content, dashboard, image, user  # 导入路由模块（注册路由时用到）
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logger import logger
@@ -115,6 +115,7 @@ app.include_router(user.router)
 app.include_router(content.router)
 app.include_router(image.router)
 app.include_router(batch.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/")

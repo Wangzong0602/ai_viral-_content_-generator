@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <!-- 历史记录页：查看/复用/删除历史生成 -->
   <div class="history-page">
     <!-- 顶部导航栏（与工作台一致） -->
@@ -8,7 +8,7 @@
         <el-menu mode="horizontal" :default-active="route.path" router :ellipsis="false" class="nav-menu">
           <el-menu-item index="/">创作工作台</el-menu-item>
           <el-menu-item index="/batch">批量生成</el-menu-item>
-          <el-menu-item index="/history">历史记录</el-menu-item>
+          <el-menu-item index="/dashboard">数据看板</el-menu-item>`n          <el-menu-item index="/history">历史记录</el-menu-item>
         </el-menu>
       </div>
       <div class="header-right">

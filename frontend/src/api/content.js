@@ -76,3 +76,9 @@ export function getBatches(limit = 20) {
 export function getBatchDetail(id) {
   return request.get(`/api/v1/content/batch/${id}`)
 }
+
+// 数据看板总览统计
+// 返回 { summary, trend, platforms, quality_dist }
+export function getDashboardOverview(days = 30) {
+  return request.get('/api/v1/dashboard/overview', { params: { days } })
+}

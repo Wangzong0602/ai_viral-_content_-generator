@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <!-- 批量生成页：一次提交多个关键词，后台逐篇生成 -->
   <div class="batch-page">
     <header class="header">
@@ -7,7 +7,7 @@
         <el-menu mode="horizontal" :default-active="route.path" router :ellipsis="false" class="nav-menu">
           <el-menu-item index="/">创作工作台</el-menu-item>
           <el-menu-item index="/batch">批量生成</el-menu-item>
-          <el-menu-item index="/history">历史记录</el-menu-item>
+          <el-menu-item index="/dashboard">数据看板</el-menu-item>`n          <el-menu-item index="/history">历史记录</el-menu-item>
         </el-menu>
       </div>
       <div class="header-right">
