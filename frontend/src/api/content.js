@@ -8,9 +8,13 @@ export function generateTopics(keyword, platform) {
   return request.post('/api/v1/content/topics', { keyword, platform })
 }
 
-// 历史记录列表
-export function getTasks(limit = 50) {
-  return request.get('/api/v1/content/tasks', { params: { limit } })
+// 历史记录列表（支持筛选：platform 平台 / keyword 搜索 / favorite 只看收藏）
+export function getTasks({ limit = 50, platform = '', keyword = '', favorite = false } = {}) {
+  const params = { limit }
+  if (platform) params.platform = platform
+  if (keyword) params.keyword = keyword
+  if (favorite) params.favorite = true
+  return request.get('/api/v1/content/tasks', { params })
 }
 
 // 历史记录详情
@@ -45,6 +49,13 @@ export function adaptContent(content, platforms) {
 // 删除历史记录（软删除）
 export function deleteTask(id) {
   return request.delete(`/api/v1/content/tasks/${id}`)
+}
+
+// 收藏/取消收藏
+export function toggleFavorite(id, favorite) {
+  return request.put(`/api/v1/content/tasks/${id}/favorite`, null, {
+    params: { favorite },
+  })
 }
 
 // 爆文逆向分析：输入链接或内容，返回拆解报告

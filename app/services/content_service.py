@@ -31,7 +31,7 @@ import json
 from datetime import datetime
 
 from langgraph.graph import END
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.agents import topic_agent
@@ -194,15 +194,48 @@ def stream_generate(
         yield {"event": "error", "data": {"detail": f"生成失败：{exc}"}}
 
 
-def get_task_list(db: Session, user_id: int, limit: int = 20) -> list[CreationTask]:
-    """查询当前用户的历史生成记录（按时间倒序，不含已删除的）。"""
+def get_task_list(
+    db: Session,
+    user_id: int,
+    limit: int = 20,
+    platform: str | None = None,
+    keyword: str | None = None,
+    favorite_only: bool = False,
+) -> list[CreationTask]:
+    """
+    查询当前用户的历史生成记录（按时间倒序，不含已删除的）。
+
+    【筛选条件（历史记录增强）】
+    - platform：按平台过滤（如"小红书"）
+    - keyword：标题/关键词模糊搜索（LIKE）
+    - favorite_only：只看已收藏
+
+    :param db: 数据库会话
+    :param user_id: 用户 ID
+    :param limit: 返回条数上限
+    :param platform: 平台筛选（可选）
+    :param keyword: 搜索关键词（可选，匹配标题或主题词）
+    :param favorite_only: 只看收藏（可选）
+    """
     stmt = (
         select(CreationTask)
         .where(CreationTask.user_id == user_id)
         .where(CreationTask.status != 3)  # 排除已删除（软删除）
-        .order_by(CreationTask.created_at.desc())
-        .limit(limit)
     )
+    # 平台筛选
+    if platform:
+        stmt = stmt.where(CreationTask.platform == platform)
+    # 关键词搜索（标题 或 主题词 LIKE）
+    if keyword:
+        like = f"%{keyword}%"
+        stmt = stmt.where(
+            or_(CreationTask.selected_title.like(like), CreationTask.keyword.like(like))
+        )
+    # 只看收藏
+    if favorite_only:
+        stmt = stmt.where(CreationTask.is_favorite == 1)
+
+    stmt = stmt.order_by(CreationTask.created_at.desc()).limit(limit)
     return list(db.scalars(stmt))
 
 

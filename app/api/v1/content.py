@@ -173,12 +173,50 @@ def generate(
 @router.get("/tasks", response_model=list[TaskOut], summary="历史记录列表")
 def task_list(
     limit: int = Query(default=20, ge=1, le=100, description="返回条数"),
+    platform: str | None = Query(default=None, description="按平台筛选"),
+    keyword: str | None = Query(default=None, min_length=1, max_length=100, description="按标题/主题搜索"),
+    favorite: bool = Query(default=False, description="只看已收藏"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """查看当前用户的生成历史（最新在前，含每篇的配图）。"""
-    tasks = content_service.get_task_list(db, current_user.id, limit)
+    """
+    查看当前用户的生成历史（最新在前，含每篇的配图）。
+
+    【筛选参数（历史记录增强）】
+    - platform：只显示指定平台（如 小红书）
+    - keyword：标题/主题模糊搜索
+    - favorite=true：只看已收藏的
+    """
+    tasks = content_service.get_task_list(
+        db, current_user.id, limit, platform, keyword, favorite
+    )
     return [_to_task_out(db, t) for t in tasks]
+
+
+@router.put("/tasks/{task_id}/favorite", response_model=MessageOut, summary="收藏/取消收藏")
+def toggle_favorite(
+    task_id: int,
+    favorite: bool = Query(default=True, description="true=收藏 false=取消收藏"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    收藏或取消收藏一条历史记录。
+
+    【收藏有什么用？】
+    用户生成内容多了以后，把优质内容标记收藏，
+    之后在历史记录页勾选"只看收藏"快速找回。
+    """
+    task = content_service.get_task_detail(db, current_user.id, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="记录不存在",
+        )
+    task.is_favorite = 1 if favorite else 0
+    db.add(task)
+    db.commit()
+    return {"message": "已收藏" if favorite else "已取消收藏"}
 
 
 @router.get("/tasks/{task_id}", response_model=TaskOut, summary="历史记录详情")

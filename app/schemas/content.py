@@ -69,6 +69,7 @@ class TaskOut(BaseModel):
     status: int
     content: str
     quality_score: int
+    is_favorite: int = 0  # 是否已收藏（1/0）
     created_at: datetime
     completed_at: datetime | None
     images: list[str] = Field(default_factory=list)  # 该任务的配图 URL 列表

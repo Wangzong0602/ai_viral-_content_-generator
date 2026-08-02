@@ -54,6 +54,10 @@ class CreationTask(Base):
     # 失败原因（status=3 时记录错误信息，方便排查）
     error_message: Mapped[str] = mapped_column(String(500), default="")
 
+    # ---------- 收藏标记（历史记录增强） ----------
+    # 1=已收藏 0=未收藏（用户标记优质内容，方便快速找回）
+    is_favorite: Mapped[int] = mapped_column(Integer, default=0, comment="1:已收藏 0:未收藏")
+
     # ---------- 时间戳 ----------
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

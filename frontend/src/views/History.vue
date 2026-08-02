@@ -36,13 +36,43 @@
           </div>
         </template>
 
+        <!-- 筛选工具栏（历史记录增强） -->
+        <div class="filter-toolbar">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索标题或主题..."
+            clearable
+            size="small"
+            style="width: 220px"
+            :prefix-icon="Search"
+            @input="onSearchInput"
+            @keyup.enter="loadTasks"
+          />
+          <el-select v-model="filterPlatform" placeholder="全部平台" clearable size="small" style="width: 130px" @change="loadTasks">
+            <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
+          </el-select>
+          <el-checkbox v-model="favoriteOnly" size="small" @change="loadTasks">只看收藏</el-checkbox>
+          <el-button v-if="hasFilter" size="small" @click="clearFilters">清除筛选</el-button>
+        </div>
+
         <!-- 空状态 -->
-        <el-empty v-if="!loading && !tasks.length" description="暂无历史记录，去创作第一篇爆文吧！">
+        <el-empty v-if="!loading && !tasks.length" :description="hasFilter ? '没有符合条件的记录' : '暂无历史记录，去创作第一篇爆文吧！'">
           <el-button type="primary" @click="router.push('/')">去创作</el-button>
         </el-empty>
 
         <!-- 记录列表 -->
         <el-table v-else :data="tasks" stripe @row-click="openDetail">
+          <el-table-column label="收藏" width="70">
+            <template #default="{ row }">
+              <el-button
+                size="small"
+                :type="row.is_favorite ? 'warning' : 'default'"
+                text
+                :icon="row.is_favorite ? StarFilled : Star"
+                @click.stop="handleFavorite(row)"
+              />
+            </template>
+          </el-table-column>
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="selected_title" label="标题" min-width="200" show-overflow-tooltip />
           <el-table-column prop="platform" label="平台" width="90" />
@@ -102,13 +132,13 @@
 </template>
 
 <script setup>
-// 历史记录页逻辑：加载列表 → 查看详情 → 复用（带参数跳工作台）→ 删除
+// 历史记录页逻辑：加载列表 → 筛选/搜索/收藏 → 查看详情 → 复用 → 删除
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
-import { getTasks, getTaskDetail, deleteTask as deleteTaskApi } from '../api/content'
+import { getTasks, getTaskDetail, deleteTask as deleteTaskApi, toggleFavorite } from '../api/content'
 
 const route = useRoute()
 const router = useRouter()
@@ -116,6 +146,18 @@ const userStore = useUserStore()
 
 const tasks = ref([])
 const loading = ref(false)
+
+// ---------- 筛选状态（历史记录增强） ----------
+const searchKeyword = ref('') // 搜索关键词
+const filterPlatform = ref('') // 平台筛选
+const favoriteOnly = ref(false) // 只看收藏
+const platforms = ['小红书', '公众号', '知乎']
+let searchTimer = null // 搜索防抖定时器
+
+// 是否有筛选条件（空状态提示 + 清除按钮显示）
+const hasFilter = computed(
+  () => searchKeyword.value || filterPlatform.value || favoriteOnly.value
+)
 
 // 详情
 const detailVisible = ref(false)
@@ -138,13 +180,47 @@ function formatTime(t) {
   return new Date(t).toLocaleString('zh-CN', { hour12: false })
 }
 
-// 加载列表
+// 加载列表（带筛选参数）
 async function loadTasks() {
   loading.value = true
   try {
-    tasks.value = await getTasks()
+    tasks.value = await getTasks({
+      platform: filterPlatform.value,
+      keyword: searchKeyword.value.trim(),
+      favorite: favoriteOnly.value,
+    })
   } finally {
     loading.value = false
+  }
+}
+
+// 搜索防抖：停止输入 400ms 后自动搜索
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => loadTasks(), 400)
+}
+
+// 清除全部筛选
+function clearFilters() {
+  searchKeyword.value = ''
+  filterPlatform.value = ''
+  favoriteOnly.value = false
+  loadTasks()
+}
+
+// 收藏/取消收藏
+async function handleFavorite(row) {
+  const target = row.is_favorite ? false : true
+  try {
+    await toggleFavorite(row.id, target)
+    row.is_favorite = target ? 1 : 0 // 局部更新，无需重新加载
+    ElMessage.success(target ? '已收藏' : '已取消收藏')
+    // 如果正在"只看收藏"筛选下取消收藏 → 从列表移除
+    if (favoriteOnly.value && !target) {
+      tasks.value = tasks.value.filter((t) => t.id !== row.id)
+    }
+  } catch (e) {
+    // 错误已由 axios 拦截器统一提示
   }
 }
 
@@ -264,6 +340,15 @@ onMounted(loadTasks)
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 筛选工具栏 */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .detail-meta {
