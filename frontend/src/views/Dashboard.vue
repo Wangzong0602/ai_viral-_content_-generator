@@ -9,7 +9,9 @@
           <el-menu-item index="/">创作工作台</el-menu-item>
           <el-menu-item index="/batch">批量生成</el-menu-item>
           <el-menu-item index="/dashboard">数据看板</el-menu-item>
-          <el-menu-item index="/history">历史记录</el-menu-item>`n          <el-menu-item v-if="userStore.user?.is_admin === 1" index="/admin">后台管理</el-menu-item>
+          <el-menu-item index="/history">历史记录</el-menu-item>
+          <el-menu-item index="/membership">会员中心</el-menu-item>
+          <el-menu-item v-if="userStore.user?.is_admin === 1" index="/admin">后台管理</el-menu-item>
         </el-menu>
       </div>
       <div class="header-right">
@@ -21,6 +23,7 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item command="membership">会员中心</el-dropdown-item>
               <el-dropdown-item command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -224,6 +227,10 @@ function handleResize() {
 
 // ---------- 用户菜单 ----------
 function handleUserCommand(command) {
+  if (command === 'membership') {
+    router.push('/membership')
+    return
+  }
   if (command === 'logout') {
     userStore.logout()
     ElMessage.success('已退出登录')

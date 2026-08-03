@@ -20,6 +20,9 @@ class AdminUserOut(BaseModel):
     # 该用户的创作统计
     task_count: int = 0
     char_count: int = 0
+    # 会员信息（会员系统新增）
+    plan_name: str = "免费版"  # 当前套餐名
+    membership_end: datetime | None = None  # 会员到期时间（无会员为 None）
 
     model_config = {"from_attributes": True}
 
@@ -56,3 +59,7 @@ class AdminStatsOut(BaseModel):
     success_contents: int = 0  # 成功生成数
     total_chars: int = 0  # 总字数
     active_users_7d: int = 0  # 近 7 天活跃用户
+    # 会员/订单统计（P2 会员系统新增，默认 0 兼容旧数据）
+    total_orders: int = 0  # 总订单数
+    paid_orders: int = 0  # 已支付订单数
+    paid_amount_yuan: float = 0  # 实收金额（元）

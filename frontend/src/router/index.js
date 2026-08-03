@@ -42,6 +42,12 @@ const routes = [
     meta: { title: '数据看板', requiresAuth: true },
   },
   {
+    path: '/membership',
+    name: 'membership',
+    component: () => import('../views/Membership.vue'), // 会员中心
+    meta: { title: '会员中心', requiresAuth: true },
+  },
+  {
     path: '/admin',
     name: 'admin',
     component: () => import('../views/Admin.vue'), // 后台管理（仅管理员）

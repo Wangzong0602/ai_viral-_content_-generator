@@ -3,8 +3,8 @@
 
 【重要安全说明】
 本脚本【只】删除测试专用数据：
-- 手机号以 199 开头的用户（测试号段）
-- 这些用户名下的创作记录
+- 手机号以 199 开头的用户（测试号段，且非管理员）
+- 这些用户名下的：创作记录、配图记录、批量任务、订单、会员记录
 
 【绝不会做】无条件全表删除（DELETE FROM users / creation_tasks）。
 真实用户数据（非 199 号段）不受任何影响。
@@ -32,6 +32,10 @@ DB_CONFIG = {
 # 测试专用号段（所有测试脚本统一使用 199 开头）
 TEST_PHONE_PREFIX = "199"
 
+# 与用户关联、需要级联清理的表（全部按"199 号段且非管理员用户"过滤）
+# 注意：batch_items 靠 batch_id 关联 batch_tasks，需单独处理，不在这里
+USER_LINKED_TABLES = ["creation_tasks", "image_records", "batch_tasks", "orders", "memberships"]
+
 
 def main() -> None:
     conn = pymysql.connect(**DB_CONFIG)
@@ -43,31 +47,58 @@ def main() -> None:
                 (f"{TEST_PHONE_PREFIX}%",),
             )
             user_count = cur.fetchone()[0]
+
+            table_counts: dict[str, int] = {}
+            for table in USER_LINKED_TABLES:
+                cur.execute(
+                    f"""SELECT COUNT(*) FROM {table}
+                        WHERE user_id IN (
+                            SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
+                        )""",
+                    (f"{TEST_PHONE_PREFIX}%",),
+                )
+                table_counts[table] = cur.fetchone()[0]
+            # batch_items 无 user_id 列，通过 batch_tasks 的 id 关联
             cur.execute(
-                """SELECT COUNT(*) FROM creation_tasks
-                   WHERE user_id IN (
-                       SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
+                """SELECT COUNT(*) FROM batch_items
+                   WHERE batch_id IN (
+                       SELECT id FROM batch_tasks WHERE user_id IN (
+                           SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
+                       )
                    )""",
                 (f"{TEST_PHONE_PREFIX}%",),
             )
-            task_count = cur.fetchone()[0]
+            table_counts["batch_items"] = cur.fetchone()[0]
 
-            print(f"将删除测试数据：{user_count} 个用户、{task_count} 条创作记录")
+            total = sum(table_counts.values())
+            print(f"将删除测试数据：{user_count} 个用户、{total} 条关联记录")
+            for table, count in table_counts.items():
+                print(f"  - {table}: {count} 条")
             print(f"（仅限手机号 {TEST_PHONE_PREFIX} 开头且非管理员，真实账号不受影响）")
             confirm = input("确认删除？输入 y 继续，其他任意键取消: ").strip().lower()
             if confirm != "y":
                 print("已取消，未删除任何数据")
                 return
 
-            # 先删创作记录（外键依赖），再删用户（均排除管理员）
+            # 先删 batch_items（靠 batch_id 关联），再删其他关联表，最后删用户（均排除管理员）
             cur.execute(
-                """DELETE FROM creation_tasks
-                   WHERE user_id IN (
-                       SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
+                """DELETE FROM batch_items
+                   WHERE batch_id IN (
+                       SELECT id FROM batch_tasks WHERE user_id IN (
+                           SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
+                       )
                    )""",
                 (f"{TEST_PHONE_PREFIX}%",),
             )
-            deleted_tasks = cur.rowcount
+            deleted_items = cur.rowcount
+            for table in USER_LINKED_TABLES:
+                cur.execute(
+                    f"""DELETE FROM {table}
+                        WHERE user_id IN (
+                            SELECT id FROM users WHERE phone LIKE %s AND is_admin != 1
+                        )""",
+                    (f"{TEST_PHONE_PREFIX}%",),
+                )
             cur.execute(
                 "DELETE FROM users WHERE phone LIKE %s AND is_admin != 1",
                 (f"{TEST_PHONE_PREFIX}%",),
@@ -75,7 +106,9 @@ def main() -> None:
             deleted_users = cur.rowcount
             conn.commit()
 
-            print(f"完成：删除 {deleted_users} 个测试用户、{deleted_tasks} 条创作记录")
+            print(f"完成：删除 {deleted_users} 个测试用户、{deleted_items} 条批量子项")
+            for table in USER_LINKED_TABLES:
+                print(f"  - {table}: {table_counts[table]} 条")
     finally:
         conn.close()
 

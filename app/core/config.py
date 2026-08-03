@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     # 生成图片的尺寸规格（通义万相格式：宽*高，支持 1024*1024 / 720*1280 / 1280*720）
     DASHSCOPE_IMAGE_SIZE: str = "1024*1024"
 
+    # ---------- 支付渠道配置（会员系统） ----------
+    # 演示模式：虚拟支付（virtual）始终可用，一键模拟支付成功。
+    # 微信/支付宝为真实渠道骨架，需商户资质后把对应开关改为 True 再接入 SDK：
+    # （开启后订单渠道校验通过，但支付动作仍走模拟逻辑，SDK 接入点见 membership_service.pay_order 注释）
+    WECHAT_PAY_ENABLED: bool = False
+    ALIPAY_PAY_ENABLED: bool = False
+
     # ---------- 图片本地存储配置 ----------
     # 图片保存目录（相对项目根目录，运行时解析为绝对路径）
     # 注意：这个目录应加入 .gitignore（data/ 已忽略），生产环境可挂载到独立磁盘

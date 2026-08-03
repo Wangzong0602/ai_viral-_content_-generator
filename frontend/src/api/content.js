@@ -129,3 +129,28 @@ export function getAdminContents(keyword = '', platform = '') {
 export function deleteAdminContent(id) {
   return request.delete(`/api/v1/admin/contents/${id}`)
 }
+
+// 套餐管理（管理端）：列表 / 新增 / 编辑 / 下架
+export function getAdminPlans() {
+  return request.get('/api/v1/admin/plans')
+}
+
+export function createAdminPlan(data) {
+  return request.post('/api/v1/admin/plans', data)
+}
+
+export function updateAdminPlan(id, data) {
+  return request.put(`/api/v1/admin/plans/${id}`, data)
+}
+
+export function deleteAdminPlan(id) {
+  return request.delete(`/api/v1/admin/plans/${id}`)
+}
+
+// 订单管理（管理端）：列表（可按状态/关键词筛选）
+export function getAdminOrders({ status = '', keyword = '', limit = 50 } = {}) {
+  const params = { limit }
+  if (status) params.order_status = status
+  if (keyword) params.keyword = keyword
+  return request.get('/api/v1/admin/orders', { params })
+}

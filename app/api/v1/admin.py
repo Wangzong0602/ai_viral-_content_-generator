@@ -14,13 +14,21 @@
 - PUT    /api/v1/admin/users/{id}/admin    设为/取消管理员
 - GET    /api/v1/admin/contents      内容列表（筛选）
 - DELETE /api/v1/admin/contents/{id} 删除内容（软删除）
+- GET    /api/v1/admin/plans         会员套餐列表（含免费版）
+- POST   /api/v1/admin/plans        新增套餐
+- PUT    /api/v1/admin/plans/{id}   编辑套餐
+- DELETE /api/v1/admin/plans/{id}   下架套餐（软删除）
+- GET    /api/v1/admin/orders       订单列表（筛选）
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.admin_deps import get_admin_user
+from app.core.exceptions import BizException
 from app.db.session import get_db
+from app.models.order import Order
+from app.models.plan import Plan
 from app.models.user import User
 from app.schemas.admin import (
     AdminContentOut,
@@ -28,8 +36,14 @@ from app.schemas.admin import (
     AdminUserOut,
     AdminUserStatusUpdate,
 )
-from app.services import admin_service
+from app.schemas.membership import (
+    AdminOrderOut,
+    AdminPlanCreate,
+    AdminPlanUpdate,
+    PlanOut,
+)
 from app.schemas.user import MessageOut
+from app.services import admin_service, membership_service
 
 router = APIRouter(prefix="/api/v1/admin", tags=["后台管理"])
 
@@ -58,6 +72,11 @@ def user_list(
         out = AdminUserOut.model_validate(u)
         out.task_count = task_count
         out.char_count = char_count
+        # 附加会员信息：当前生效会员的套餐名 + 到期时间
+        membership_info = membership_service.get_user_membership(db, u.id)
+        if membership_info["is_active"]:
+            out.plan_name = membership_info["plan"].get("name", "免费版")
+            out.membership_end = membership_info["end_date"]
         result.append(out)
     return result
 
@@ -139,3 +158,122 @@ def content_delete(
     db.add(content)
     db.commit()
     return {"message": "内容已删除"}
+
+
+# ========== 会员套餐管理 ==========
+
+@router.get("/plans", response_model=list[PlanOut], summary="套餐列表（含免费版）")
+def plan_list(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_admin_user),
+) -> list[PlanOut]:
+    """
+    管理端套餐列表（免费版 + 全部数据库套餐，含已下架的）。
+    前端据此渲染表格，可编辑/上下架。
+    """
+    plans = membership_service.get_plan_list(db, include_off_shelf=True)
+    return [PlanOut.from_dict(p) for p in plans]
+
+
+@router.post("/plans", response_model=PlanOut, summary="新增套餐")
+def plan_create(
+    data: AdminPlanCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_admin_user),
+) -> PlanOut:
+    """
+    新增套餐（如"季度版""终身版"）。
+
+    【code 唯一性】
+    code 是套餐标识（代码/前端判断用），重复会触发数据库唯一索引错误，
+    这里先查一次给友好提示。
+    """
+    exists = membership_service.get_plan_by_code(db, data.code)
+    if exists:
+        raise BizException(f"套餐标识 {data.code} 已存在")
+    plan = Plan(
+        code=data.code,
+        name=data.name,
+        price=int(round(data.price_yuan * 100)),  # 元 → 分（防浮点误差用 round）
+        duration_days=data.duration_days,
+        features=data.features,
+        description=data.description,
+        sort_order=data.sort_order,
+        status=data.status,
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return PlanOut.from_dict(membership_service._plan_to_dict(plan))
+
+
+@router.put("/plans/{plan_id}", response_model=PlanOut, summary="编辑套餐")
+def plan_update(
+    plan_id: int,
+    data: AdminPlanUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_admin_user),
+) -> PlanOut:
+    """
+    编辑套餐（字段可选，只更新传了的）。
+
+    【排除规则】
+    - code 不允许改（它是套餐标识，历史订单/会员记录依赖它）
+    - 其余字段（名称/价格/权益/排序/上下架）均可改
+    """
+    plan = membership_service.get_plan_by_id(db, plan_id)
+    if not plan:
+        raise BizException("套餐不存在", status_code=404)
+
+    updates = data.model_dump(exclude_unset=True)  # 只取前端传了的字段
+    if "price_yuan" in updates:
+        plan.price = int(round(updates.pop("price_yuan") * 100))
+    for field, value in updates.items():
+        setattr(plan, field, value)
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return PlanOut.from_dict(membership_service._plan_to_dict(plan))
+
+
+@router.delete("/plans/{plan_id}", response_model=MessageOut, summary="下架套餐")
+def plan_delete(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_admin_user),
+):
+    """
+    下架套餐（软删除 status=2）。
+
+    【为什么是"下架"而不是物理删除？】
+    历史订单/会员记录里引用了套餐 ID，物理删除会导致这些记录悬空。
+    下架后：C 端不可见、不可购买，历史记录依然正常显示。
+    """
+    plan = membership_service.get_plan_by_id(db, plan_id)
+    if not plan:
+        raise BizException("套餐不存在", status_code=404)
+    plan.status = 2
+    db.add(plan)
+    db.commit()
+    return {"message": f"套餐「{plan.name}」已下架"}
+
+
+# ========== 订单管理 ==========
+
+@router.get("/orders", response_model=list[AdminOrderOut], summary="订单列表")
+def order_list(
+    order_status: int | None = Query(default=None, ge=1, le=4, description="状态筛选：1待支付 2已支付 3已取消 4已退款"),
+    keyword: str | None = Query(default=None, max_length=100, description="搜索订单号/套餐名"),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_admin_user),
+) -> list[AdminOrderOut]:
+    """
+    后台订单管理：全部用户的订单（可按状态/关键词筛选），附用户昵称。
+    """
+    orders = admin_service.get_admin_orders(db, order_status, keyword, limit)
+    result = []
+    for o in orders:
+        user = db.get(User, o.user_id)
+        result.append(AdminOrderOut.from_order(o, user.nickname if user else ""))
+    return result

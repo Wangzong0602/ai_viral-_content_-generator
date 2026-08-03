@@ -9,6 +9,7 @@
           <el-menu-item index="/batch">批量生成</el-menu-item>
           <el-menu-item index="/dashboard">数据看板</el-menu-item>
           <el-menu-item index="/history">历史记录</el-menu-item>
+          <el-menu-item index="/membership">会员中心</el-menu-item>
           <el-menu-item v-if="userStore.user?.is_admin === 1" index="/admin">后台管理</el-menu-item>
         </el-menu>
       </div>
@@ -21,6 +22,7 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item command="membership">会员中心</el-dropdown-item>
               <el-dropdown-item command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -68,6 +70,16 @@
               <div class="stat-value">{{ stats.active_users_7d }}</div>
               <div class="stat-sub">有创作行为的用户</div>
             </el-card>
+            <el-card class="stat-card">
+              <div class="stat-label">已支付订单</div>
+              <div class="stat-value">{{ stats.paid_orders }}</div>
+              <div class="stat-sub">共 {{ stats.total_orders }} 笔</div>
+            </el-card>
+            <el-card class="stat-card">
+              <div class="stat-label">实收金额</div>
+              <div class="stat-value">¥{{ stats.paid_amount_yuan }}</div>
+              <div class="stat-sub">演示支付累计</div>
+            </el-card>
           </div>
         </div>
 
@@ -111,6 +123,20 @@
             </el-table-column>
             <el-table-column prop="task_count" label="创作数" width="80" />
             <el-table-column prop="char_count" label="总字数" width="100" />
+            <el-table-column label="会员" width="120">
+              <template #default="{ row }">
+                <el-tag v-if="row.plan_name !== '免费版'" type="warning" size="small">
+                  {{ row.plan_name }}
+                </el-tag>
+                <span v-else class="free-text">免费版</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="会员到期" width="110">
+              <template #default="{ row }">
+                <span v-if="row.membership_end" class="muted-text">{{ row.membership_end.slice(0, 10) }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
             <el-table-column label="注册时间" width="160">
               <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
             </el-table-column>
@@ -184,8 +210,132 @@
             </el-table-column>
           </el-table>
         </div>
+
+        <!-- ========== 套餐管理 ========== -->
+        <div v-if="activeMenu === 'plans'" class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">💎 套餐管理</h3>
+            <div class="panel-actions">
+              <el-button size="small" type="primary" @click="openPlanDialog()">新增套餐</el-button>
+            </div>
+          </div>
+
+          <el-table :data="plans" stripe size="small">
+            <el-table-column prop="code" label="标识" width="110" />
+            <el-table-column prop="name" label="套餐名" width="120" />
+            <el-table-column label="价格" width="110">
+              <template #default="{ row }">
+                <template v-if="row.price_yuan > 0">¥{{ row.price_yuan }} / {{ row.duration_days }}天</template>
+                <template v-else>免费</template>
+              </template>
+            </el-table-column>
+            <el-table-column prop="description" label="介绍" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="sort_order" label="排序" width="70" />
+            <el-table-column label="状态" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
+                  {{ row.status === 1 ? '上架' : '下架' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200">
+              <template #default="{ row }">
+                <el-button v-if="row.code !== 'free'" size="small" @click="openPlanDialog(row)">编辑</el-button>
+                <el-button v-if="row.status === 1 && row.code !== 'free'" size="small" type="danger" @click="deletePlan(row)">下架</el-button>
+                <el-button v-if="row.status === 2 && row.code !== 'free'" size="small" type="success" @click="togglePlanStatus(row, 1)">上架</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- ========== 订单管理 ========== -->
+        <div v-if="activeMenu === 'orders'" class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">🧾 订单管理</h3>
+            <div class="panel-actions">
+              <el-select v-model="orderStatus" placeholder="全部状态" clearable size="small" style="width: 120px" @change="loadOrders">
+                <el-option v-for="(label, val) in orderStatusMap" :key="val" :label="label" :value="Number(val)" />
+              </el-select>
+              <el-input
+                v-model="orderKeyword"
+                placeholder="搜索订单号/套餐名"
+                clearable
+                size="small"
+                style="width: 200px"
+                @keyup.enter="loadOrders"
+                @clear="loadOrders"
+              />
+              <el-button size="small" :loading="loadingOrders" @click="loadOrders">搜索</el-button>
+            </div>
+          </div>
+
+          <el-table :data="orders" stripe size="small">
+            <el-table-column prop="order_no" label="订单号" width="190" show-overflow-tooltip />
+            <el-table-column prop="user_nickname" label="用户" width="100" show-overflow-tooltip />
+            <el-table-column prop="plan_name" label="套餐" width="110" />
+            <el-table-column label="金额" width="90">
+              <template #default="{ row }">¥{{ row.amount_yuan }}</template>
+            </el-table-column>
+            <el-table-column label="渠道" width="100">
+              <template #default="{ row }">{{ { virtual: '模拟支付', wechat: '微信', alipay: '支付宝' }[row.channel] || row.channel }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="90">
+              <template #default="{ row }">
+                <el-tag :type="orderStatusType(row.status)" size="small">{{ orderStatusMap[row.status] }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="支付时间" width="160">
+              <template #default="{ row }">{{ row.paid_at ? formatTime(row.paid_at) : '-' }}</template>
+            </el-table-column>
+            <el-table-column label="创建时间" width="160">
+              <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
       </main>
     </div>
+
+    <!-- ========== 套餐编辑弹窗 ========== -->
+    <el-dialog v-model="planDialogVisible" :title="editingPlan ? '编辑套餐' : '新增套餐'" width="520">
+      <el-form :model="planForm" label-width="90px">
+        <el-form-item label="套餐标识" required>
+          <el-input v-model="planForm.code" placeholder="如 pro（唯一，创建后不可改）" :disabled="!!editingPlan" />
+        </el-form-item>
+        <el-form-item label="套餐名称" required>
+          <el-input v-model="planForm.name" placeholder="如 专业版" />
+        </el-form-item>
+        <el-form-item label="价格（元）" required>
+          <el-input-number v-model="planForm.price_yuan" :min="0" :precision="2" :step="10" />
+        </el-form-item>
+        <el-form-item label="有效期（天）">
+          <el-input-number v-model="planForm.duration_days" :min="1" :max="3650" :step="30" />
+        </el-form-item>
+        <el-form-item label="介绍">
+          <el-input v-model="planForm.description" type="textarea" :rows="2" placeholder="一句话介绍，展示在套餐卡片上" />
+        </el-form-item>
+        <el-form-item label="排序权重">
+          <el-input-number v-model="planForm.sort_order" :min="0" :max="100" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-radio-group v-model="planForm.status">
+            <el-radio :value="1">上架</el-radio>
+            <el-radio :value="2">下架</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="权益配置">
+          <el-input
+            v-model="planForm.featuresText"
+            type="textarea"
+            :rows="5"
+            placeholder='JSON 格式，如：{"daily_articles":100,"image_per_article":10,"batch_limit":50,"analyze_daily":50,"export_formats":["txt","md","html"],"priority":"优先队列"}（-1 表示不限，0 表示无）'
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="planDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingPlan" @click="savePlan">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -203,6 +353,11 @@ import {
   updateUserStatus,
   updateUserAdmin,
   deleteAdminContent,
+  getAdminPlans,
+  createAdminPlan,
+  updateAdminPlan,
+  deleteAdminPlan,
+  getAdminOrders,
 } from '../api/content'
 
 const route = useRoute()
@@ -213,6 +368,8 @@ const menus = [
   { key: 'stats', label: '数据总览', icon: '📊' },
   { key: 'users', label: '用户管理', icon: '👥' },
   { key: 'contents', label: '内容管理', icon: '📄' },
+  { key: 'plans', label: '套餐管理', icon: '💎' },
+  { key: 'orders', label: '订单管理', icon: '🧾' },
 ]
 const activeMenu = ref('stats')
 const platforms = ['小红书', '公众号', '知乎']
@@ -220,7 +377,7 @@ const platforms = ['小红书', '公众号', '知乎']
 const avatarText = computed(() => (userStore.nickname || '用').charAt(0))
 
 // 统计
-const stats = ref({ total_users: 0, new_users_7d: 0, total_contents: 0, success_contents: 0, total_chars: 0, active_users_7d: 0 })
+const stats = ref({ total_users: 0, new_users_7d: 0, total_contents: 0, success_contents: 0, total_chars: 0, active_users_7d: 0, total_orders: 0, paid_orders: 0, paid_amount_yuan: 0 })
 
 // 用户
 const users = ref([])
@@ -233,11 +390,36 @@ const loadingContents = ref(false)
 const contentKeyword = ref('')
 const contentPlatform = ref('')
 
+// 套餐管理
+const plans = ref([])
+const planDialogVisible = ref(false)
+const editingPlan = ref(null)
+const savingPlan = ref(false)
+const planForm = ref({
+  code: '',
+  name: '',
+  price_yuan: 199,
+  duration_days: 30,
+  description: '',
+  sort_order: 1,
+  status: 1,
+  featuresText: '',
+})
+
+// 订单管理
+const orders = ref([])
+const loadingOrders = ref(false)
+const orderKeyword = ref('')
+const orderStatus = ref('')
+const orderStatusMap = { 1: '待支付', 2: '已支付', 3: '已取消', 4: '已退款' }
+
 function switchMenu(key) {
   activeMenu.value = key
   if (key === 'stats') loadStats()
   if (key === 'users') loadUsers()
   if (key === 'contents') loadContents()
+  if (key === 'plans') loadPlans()
+  if (key === 'orders') loadOrders()
 }
 
 function formatChars(n) {
@@ -313,8 +495,127 @@ async function deleteContent(row) {
   }
 }
 
+// ---------- 套餐管理 ----------
+async function loadPlans() {
+  try {
+    plans.value = await getAdminPlans()
+  } catch {
+    // 403 已由拦截器提示
+  }
+}
+
+function orderStatusType(s) {
+  return { 1: 'warning', 2: 'success', 3: 'info', 4: 'danger' }[s] || 'info'
+}
+
+// 打开新增/编辑弹窗（编辑时回填表单）
+function openPlanDialog(plan = null) {
+  editingPlan.value = plan
+  if (plan) {
+    planForm.value = {
+      code: plan.code,
+      name: plan.name,
+      price_yuan: plan.price_yuan,
+      duration_days: plan.duration_days,
+      description: plan.description,
+      sort_order: plan.sort_order,
+      status: plan.status,
+      featuresText: JSON.stringify(plan.features || {}, null, 2),
+    }
+  } else {
+    planForm.value = { code: '', name: '', price_yuan: 199, duration_days: 30, description: '', sort_order: 1, status: 1, featuresText: '' }
+  }
+  planDialogVisible.value = true
+}
+
+// 保存套餐（新增或编辑）：featuresText 是 JSON 字符串，需解析校验
+async function savePlan() {
+  const f = planForm.value
+  if (!f.code.trim() || !f.name.trim()) {
+    ElMessage.warning('请填写套餐标识和名称')
+    return
+  }
+  let features = {}
+  if (f.featuresText.trim()) {
+    try {
+      features = JSON.parse(f.featuresText)
+    } catch {
+      ElMessage.error('权益配置不是合法 JSON，请检查格式')
+      return
+    }
+  }
+  savingPlan.value = true
+  try {
+    const payload = {
+      code: f.code.trim(),
+      name: f.name.trim(),
+      price_yuan: f.price_yuan,
+      duration_days: f.duration_days,
+      description: f.description,
+      sort_order: f.sort_order,
+      status: f.status,
+      features,
+    }
+    if (editingPlan.value) {
+      // 编辑时 code 不能改，去掉 code 字段（后端忽略也行，明确一点）
+      delete payload.code
+      await updateAdminPlan(editingPlan.value.id, payload)
+      ElMessage.success('套餐已更新')
+    } else {
+      await createAdminPlan(payload)
+      ElMessage.success('套餐已创建')
+    }
+    planDialogVisible.value = false
+    loadPlans()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '保存失败')
+  } finally {
+    savingPlan.value = false
+  }
+}
+
+// 下架套餐
+async function deletePlan(row) {
+  try {
+    await ElMessageBox.confirm(`确定下架套餐「${row.name}」吗？下架后用户不可再购买。`, '提示', { type: 'warning' })
+    await deleteAdminPlan(row.id)
+    ElMessage.success('已下架')
+    loadPlans()
+  } catch {
+    // 取消或失败
+  }
+}
+
+// 上架/下架切换（编辑弹窗里也可改，这里提供快捷操作）
+async function togglePlanStatus(row, status) {
+  try {
+    await updateAdminPlan(row.id, { status })
+    ElMessage.success(status === 1 ? '已上架' : '已下架')
+    loadPlans()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '操作失败')
+  }
+}
+
+// ---------- 订单管理 ----------
+async function loadOrders() {
+  loadingOrders.value = true
+  try {
+    orders.value = await getAdminOrders({
+      status: orderStatus.value,
+      keyword: orderKeyword.value.trim(),
+    })
+  } finally {
+    loadingOrders.value = false
+  }
+}
+
 // ---------- 用户菜单 ----------
 function handleUserCommand(command) {
+  if (command === 'membership') {
+    router.push('/membership')
+    return
+  }
   if (command === 'logout') {
     userStore.logout()
     ElMessage.success('已退出登录')
@@ -432,11 +733,21 @@ onMounted(loadStats)
   gap: 10px;
 }
 
+/* 用户列表会员列辅助样式 */
+.free-text {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.muted-text {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
 /* 统计卡片 */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(4, 1fr);  gap: 16px;
 }
 
 .stat-card {

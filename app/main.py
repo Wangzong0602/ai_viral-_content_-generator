@@ -24,7 +24,7 @@ from fastapi.openapi.docs import get_swagger_ui_html  # 生成 Swagger 页面 HT
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles  # 托管静态文件
 
-from app.api.v1 import admin, auth, batch, content, dashboard, image, template, user  # 导入路由模块（注册路由时用到）
+from app.api.v1 import admin, auth, batch, content, dashboard, image, membership, template, user  # 导入路由模块（注册路由时用到）
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logger import logger
@@ -61,6 +61,15 @@ async def lifespan(app: FastAPI):
     seed_db = SessionLocal()
     try:
         init_seed_templates(seed_db)
+    finally:
+        seed_db.close()
+
+    # 初始化会员套餐种子数据（幂等：按 code 判断，已存在则跳过）
+    from app.services.membership_service import init_seed_plans
+
+    seed_db = SessionLocal()
+    try:
+        init_seed_plans(seed_db)
     finally:
         seed_db.close()
 
@@ -130,6 +139,7 @@ app.include_router(batch.router)
 app.include_router(dashboard.router)
 app.include_router(template.router)
 app.include_router(admin.router)
+app.include_router(membership.router)
 
 
 @app.get("/")
