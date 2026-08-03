@@ -160,6 +160,9 @@
                 >
                   设为管理员
                 </el-button>
+                <el-button size="small" type="success" @click="openGrantDialog(row)">
+                  续期
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -336,6 +339,30 @@
         <el-button type="primary" :loading="savingPlan" @click="savePlan">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- ========== 会员续期弹窗 ========== -->
+    <el-dialog v-model="grantDialogVisible" :title="`会员续期 - ${grantUser?.nickname || ''}`" width="420">
+      <el-form label-width="90px">
+        <el-form-item label="目标套餐" required>
+          <el-select v-model="grantForm.planId" placeholder="选择套餐" style="width: 100%">
+            <el-option v-for="p in grantablePlans" :key="p.id" :label="`${p.name}（¥${p.price_yuan}/${p.duration_days}天）`" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="赠送天数">
+          <el-input-number v-model="grantForm.days" :min="1" :max="3650" :step="30" placeholder="默认套餐有效期" />
+          <span class="muted-text" style="margin-left: 8px">留空 = 套餐默认天数</span>
+        </el-form-item>
+      </el-form>
+      <div class="muted-text" style="margin: 0 0 12px 90px">
+        {{ grantUser?.plan_name || '免费版' }}
+        <template v-if="grantUser?.membership_end">，到期 {{ grantUser.membership_end.slice(0, 10) }}</template>
+        <template v-else>（当前无有效会员）</template>
+      </div>
+      <template #footer>
+        <el-button @click="grantDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="granting" @click="confirmGrant">确认开通</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -358,6 +385,7 @@ import {
   updateAdminPlan,
   deleteAdminPlan,
   getAdminOrders,
+  grantMembership,
 } from '../api/content'
 
 const route = useRoute()
@@ -412,6 +440,13 @@ const loadingOrders = ref(false)
 const orderKeyword = ref('')
 const orderStatus = ref('')
 const orderStatusMap = { 1: '待支付', 2: '已支付', 3: '已取消', 4: '已退款' }
+
+// 会员续期
+const grantDialogVisible = ref(false)
+const grantUser = ref(null) // 要续期的用户行
+const granting = ref(false)
+const grantForm = ref({ planId: null, days: null })
+const grantablePlans = computed(() => plans.value.filter((p) => p.code !== 'free' && p.status === 1))
 
 function switchMenu(key) {
   activeMenu.value = key
@@ -607,6 +642,35 @@ async function loadOrders() {
     })
   } finally {
     loadingOrders.value = false
+  }
+}
+
+// ---------- 会员续期 ----------
+// 打开续期弹窗：先确保套餐列表已加载（选套餐下拉用）
+async function openGrantDialog(row) {
+  grantUser.value = row
+  grantForm.value = { planId: null, days: null }
+  if (!plans.value.length) {
+    try { plans.value = await getAdminPlans() } catch { /* 忽略 */ }
+  }
+  grantDialogVisible.value = true
+}
+
+async function confirmGrant() {
+  if (!grantForm.value.planId) {
+    ElMessage.warning('请选择套餐')
+    return
+  }
+  granting.value = true
+  try {
+    const res = await grantMembership(grantUser.value.id, grantForm.value.planId, grantForm.value.days)
+    ElMessage.success(res.message || '已开通')
+    grantDialogVisible.value = false
+    loadUsers() // 刷新用户列表（会员列更新）
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '开通失败')
+  } finally {
+    granting.value = false
   }
 }
 

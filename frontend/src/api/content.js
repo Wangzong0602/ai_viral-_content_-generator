@@ -154,3 +154,10 @@ export function getAdminOrders({ status = '', keyword = '', limit = 50 } = {}) {
   if (keyword) params.keyword = keyword
   return request.get('/api/v1/admin/orders', { params })
 }
+
+// 手动开通/续期用户会员（管理端）
+export function grantMembership(userId, planId, days = null) {
+  const body = { plan_id: planId, note: '管理员手动开通' }
+  if (days) body.days = days
+  return request.put(`/api/v1/admin/users/${userId}/membership`, body)
+}

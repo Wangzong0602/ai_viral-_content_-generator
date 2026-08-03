@@ -257,7 +257,12 @@ def cancel_order(db: Session, order: Order) -> None:
 
 
 def activate_membership(
-    db: Session, user_id: int, plan_id: int, plan_name: str, now: datetime
+    db: Session,
+    user_id: int,
+    plan_id: int,
+    plan_name: str,
+    now: datetime,
+    days: int | None = None,
 ) -> Membership:
     """
     开通/续费会员（核心逻辑，真实支付接入后也复用这里）。
@@ -267,8 +272,10 @@ def activate_membership(
       （如 7月1日开通到7月31日，8月1日续费 → 到期日变 8月30日，不会丢 7 月的天数）
     - 其他情况（没会员 / 会员已过期 / 换套餐）→ 旧有效记录置为取消(3)，
       新建一条记录 start=now, end=now+duration
+
+    :param days: 覆盖套餐默认时长（管理员手动赠予时传，支付流程不传）
     """
-    duration = db.get(Plan, plan_id).duration_days if db.get(Plan, plan_id) else 30
+    duration = days or (db.get(Plan, plan_id).duration_days if db.get(Plan, plan_id) else 30)
 
     # 查用户当前"有效且未过期"的会员记录（status=1 且 end_date 在未来）
     current = db.scalar(
@@ -314,9 +321,11 @@ def get_user_membership(db: Session, user_id: int) -> dict:
         is_active: 是否有效期内,
         start_date / end_date: 有效期,
         days_left: 剩余天数,
+        last_end_date: 最近一条会员记录的到期时间（已过期时供前端提示用）,
     }
     """
     now = datetime.now()
+    # 当前有效会员（status=1 且未过期）
     current = db.scalar(
         select(Membership)
         .where(
@@ -326,15 +335,24 @@ def get_user_membership(db: Session, user_id: int) -> dict:
         )
         .order_by(Membership.end_date.desc())
     )
+    # 最近一条会员记录（不限状态，用于"已过期"提示）
+    last = db.scalar(
+        select(Membership)
+        .where(Membership.user_id == user_id)
+        .order_by(Membership.end_date.desc())
+        .limit(1)
+    )
 
     if not current:
-        # 免费用户：返回内置免费版定义
+        # 免费用户 / 会员已过期：返回内置免费版定义
+        # last_end_date 非空 = 曾经有会员但已过期 → 前端显示"已过期，续费可恢复"
         return {
             "plan": FREE_PLAN,
             "is_active": False,  # 免费版没有"有效期"概念，标记 False 让前端显示"免费版"
             "start_date": None,
             "end_date": None,
             "days_left": 0,
+            "last_end_date": last.end_date if last else None,
         }
 
     plan = db.get(Plan, current.plan_id)
@@ -345,6 +363,7 @@ def get_user_membership(db: Session, user_id: int) -> dict:
         "start_date": current.start_date,
         "end_date": current.end_date,
         "days_left": max((current.end_date - now).days, 0),
+        "last_end_date": last.end_date if last else None,
     }
 
 

@@ -21,6 +21,8 @@
 - GET    /api/v1/admin/orders       订单列表（筛选）
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -37,6 +39,7 @@ from app.schemas.admin import (
     AdminUserStatusUpdate,
 )
 from app.schemas.membership import (
+    AdminMembershipGrant,
     AdminOrderOut,
     AdminPlanCreate,
     AdminPlanUpdate,
@@ -158,6 +161,42 @@ def content_delete(
     db.add(content)
     db.commit()
     return {"message": "内容已删除"}
+
+
+@router.put("/users/{user_id}/membership", response_model=dict, summary="手动开通/续期会员")
+def user_membership_grant(
+    user_id: int,
+    data: AdminMembershipGrant,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_admin_user),
+):
+    """
+    管理员手动开通/续期用户会员（运营赠送场景）。
+
+    【与购买流程的区别】
+    购买流程：创建订单 → 模拟支付 → activate_membership（走支付）
+    本接口：跳过支付直接调用 activate_membership（管理后台授权操作）
+
+    【续期规则与购买一致】
+    - 用户当前持有同一套餐的有效会员 → 到期日顺延
+    - 无会员/已过期/换套餐 → 旧记录取消，新开一条
+    """
+    user = admin_service.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    plan = membership_service.get_plan_by_id(db, data.plan_id)
+    if not plan or plan.status != 1:
+        raise BizException("套餐不存在或已下架")
+
+    membership = membership_service.activate_membership(
+        db, user_id, plan.id, plan.name, datetime.now(), days=data.days
+    )
+    db.commit()
+    return {
+        "message": f"已为用户「{user.nickname}」开通{plan.name}（{data.days or plan.duration_days}天）",
+        "membership_id": membership.id,
+        "end_date": membership.end_date.isoformat(),
+    }
 
 
 # ========== 会员套餐管理 ==========

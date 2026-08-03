@@ -56,6 +56,34 @@
         </div>
       </el-card>
 
+      <!-- ========== 到期提醒条 ========== -->
+      <!-- 临期提醒：会员有效但剩余 ≤3 天 -->
+      <el-alert
+        v-if="membership.is_active && membership.days_left <= 3"
+        type="warning"
+        show-icon
+        :closable="false"
+        class="expiry-alert"
+      >
+        <template #title>
+          ⏰ 会员将于 <b>{{ membership.days_left }} 天</b> 后到期（{{ formatTime(membership.end_date) }}），
+          届时将恢复免费版权益，请及时续费
+        </template>
+      </el-alert>
+      <!-- 过期提醒：无有效会员但历史上有会员记录 -->
+      <el-alert
+        v-else-if="!membership.is_active && membership.last_end_date"
+        type="error"
+        show-icon
+        :closable="false"
+        class="expiry-alert"
+      >
+        <template #title>
+          ⏰ 会员已于 {{ formatTime(membership.last_end_date) }} 过期，当前为免费版权益，
+          续费后立即恢复全部会员权益
+        </template>
+      </el-alert>
+
       <!-- ========== 今日权益用量 ========== -->
       <el-card class="quota-card" shadow="never">
         <div class="quota-title">📊 今日用量（每日 0 点重置）</div>
@@ -461,6 +489,11 @@ onMounted(loadData)
   font-size: 13px;
   color: #6b7280;
   margin-top: 4px;
+}
+
+/* 到期提醒条 */
+.expiry-alert {
+  margin-bottom: 16px;
 }
 
 /* 今日用量 */

@@ -53,6 +53,7 @@ class MembershipOut(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     days_left: int = 0  # 剩余天数
+    last_end_date: datetime | None = None  # 最近会员到期时间（已过期提示用）
 
 
 class OrderCreate(BaseModel):
@@ -170,3 +171,17 @@ class AdminOrderOut(BaseModel):
             created_at=order.created_at,
         )
         return out
+
+
+class AdminMembershipGrant(BaseModel):
+    """
+    管理端手动开通/续期会员请求。
+
+    :param plan_id: 目标套餐 ID（免费版无 ID，不能选）
+    :param days: 赠送天数，不传则用套餐自带的 duration_days
+    :param note: 操作备注（写进返回消息，供审计）
+    """
+
+    plan_id: int = Field(..., ge=1, description="套餐 ID")
+    days: int | None = Field(default=None, ge=1, le=3650, description="赠送天数（默认套餐有效期）")
+    note: str = Field(default="管理员手动开通", max_length=100)

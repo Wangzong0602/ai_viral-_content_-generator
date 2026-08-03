@@ -390,7 +390,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { generateTopics, generateImages, adaptContent, analyzeArticle, getTemplates } from '../api/content'
-import { getMyQuotaApi } from '../api/membership'
+import { getMyMembershipApi, getMyQuotaApi } from '../api/membership'
 
 const route = useRoute()
 const router = useRouter()
@@ -418,6 +418,24 @@ async function loadQuota() {
     todayQuota.value = await getMyQuotaApi()
   } catch {
     todayQuota.value = null
+  }
+}
+
+// 会员到期提醒：登录后临期（≤3 天）或已过期时弹一次提示
+// 用 sessionStorage 标记"本会话已提示"，避免每次进页面都打扰
+async function checkMembershipExpiry() {
+  if (sessionStorage.getItem('expiry_tip_shown')) return
+  try {
+    const me = await getMyMembershipApi()
+    if (me.is_active && me.days_left <= 3) {
+      ElMessage.warning(`会员将于 ${me.days_left} 天后到期，请及时续费`)
+      sessionStorage.setItem('expiry_tip_shown', '1')
+    } else if (!me.is_active && me.last_end_date) {
+      ElMessage.warning('会员已过期，续费可立即恢复全部权益')
+      sessionStorage.setItem('expiry_tip_shown', '1')
+    }
+  } catch {
+    // 静默：会员接口失败不影响创作
   }
 }
 
@@ -527,9 +545,10 @@ const progressTagType = computed(() =>
 // 头像文字（昵称首字符）
 const avatarText = computed(() => (userStore.nickname || '用').charAt(0))
 
-// 初始加载当前平台的模板列表 + 今日配额提示
+// 初始加载当前平台的模板列表 + 今日配额提示 + 会员到期提醒
 loadTemplates(platform.value)
 loadQuota()
+checkMembershipExpiry()
 
 // 从历史记录"复用"跳转过来时：预填关键词并自动开始生成
 // URL 格式：/?keyword=xxx&platform=小红书&auto=1
