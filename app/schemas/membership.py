@@ -97,6 +97,23 @@ class PayResultOut(BaseModel):
     membership_id: int | None = None
 
 
+class QuotaItemOut(BaseModel):
+    """单个动作的今日用量。"""
+
+    used: int = 0  # 今日已用（-1 时无意义）
+    limit: int = 0  # 上限（-1=不限，0=未开放）
+    remaining: int = 0  # 剩余（-1=不限）
+
+
+class QuotaUsageOut(BaseModel):
+    """今日权益用量响应（会员中心展示）。"""
+
+    article: QuotaItemOut  # 文章生成（每日次数）
+    analyze: QuotaItemOut  # 爆文分析（每日次数）
+    image: QuotaItemOut  # AI 配图（每日张数）
+    batch: QuotaItemOut  # 批量生成（limit=单次篇数上限）
+
+
 # ---------- 管理端 ----------
 
 class AdminPlanCreate(BaseModel):

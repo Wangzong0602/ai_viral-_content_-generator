@@ -24,7 +24,7 @@ from app.schemas.batch import (
     BatchOut,
 )
 from app.schemas.content import SUPPORTED_PLATFORMS
-from app.services import batch_service
+from app.services import batch_service, quota_service
 from app.core.exceptions import BizException
 
 router = APIRouter(prefix="/api/v1/content/batch", tags=["批量生成"])
@@ -44,6 +44,13 @@ def create_batch(
         )
     # 解析关键词
     keywords = batch_service.parse_keywords(data.keywords_text)
+
+    # 权益配额（双校验，先检查再消耗）：
+    # 1. batch 动作：校验单次篇数上限（免费版 batch_limit=0 → 功能禁用，直接拒绝）
+    # 2. article 动作：按篇数消耗每日文章配额（批量 10 篇 = 扣 10 次文章次数）
+    quota_service.check_quota(db, current_user, "batch", len(keywords))
+    quota_service.consume_quota(db, current_user, "article", len(keywords))
+
     # 创建并投递
     batch = batch_service.create_batch(
         db, current_user.id, data.name or "", data.platform, keywords

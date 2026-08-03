@@ -11,6 +11,11 @@ export function getMyMembershipApi() {
   return request.get('/api/v1/membership/me')
 }
 
+// 今日权益用量（已用/上限/剩余）
+export function getMyQuotaApi() {
+  return request.get('/api/v1/membership/quota')
+}
+
 // 创建订单（planId + 支付渠道 channel: virtual/wechat/alipay）
 export function createOrderApi(planId, channel) {
   return request.post('/api/v1/membership/orders', { plan_id: planId, channel })

@@ -35,6 +35,11 @@
     <main class="main">
       <!-- ========== 第一步：输入创作需求 ========== -->
       <el-card class="input-card" v-show="phase === 'input' || phase === 'topics'">
+        <!-- 今日配额提示（免费版有限额，引导开通会员；加载失败不显示） -->
+        <div v-if="quotaRemainText" class="quota-tip" :class="{ 'quota-tip-warn': todayQuota?.article?.remaining === 0 }">
+          {{ quotaRemainText }}
+          <router-link to="/membership" class="quota-tip-link">开通会员解锁更多次数 →</router-link>
+        </div>
         <div class="input-row">
           <el-input
             v-model="keyword"
@@ -385,6 +390,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import { generateTopics, generateImages, adaptContent, analyzeArticle, getTemplates } from '../api/content'
+import { getMyQuotaApi } from '../api/membership'
 
 const route = useRoute()
 const router = useRouter()
@@ -396,6 +402,24 @@ const keyword = ref('')
 const platform = ref('小红书')
 // 首屏多平台选项：生成前选择"同时生成哪些平台版本"（排除主平台本身）
 const multiPlatforms = ref([])
+
+// 今日权益配额（顶部提示：剩余生成次数）
+const todayQuota = ref(null) // null=未加载
+const quotaRemainText = computed(() => {
+  const q = todayQuota.value?.article
+  if (!q) return ''
+  if (q.remaining === -1) return '今日生成次数：不限'
+  return `今日剩余生成次数：${q.remaining} / ${q.limit}`
+})
+
+// 加载今日配额（用于顶部剩余次数提示；失败静默，不影响创作）
+async function loadQuota() {
+  try {
+    todayQuota.value = await getMyQuotaApi()
+  } catch {
+    todayQuota.value = null
+  }
+}
 
 // 生成按钮文案：根据是否选多平台动态变化
 const generateBtnText = computed(() =>
@@ -503,8 +527,9 @@ const progressTagType = computed(() =>
 // 头像文字（昵称首字符）
 const avatarText = computed(() => (userStore.nickname || '用').charAt(0))
 
-// 初始加载当前平台的模板列表
+// 初始加载当前平台的模板列表 + 今日配额提示
 loadTemplates(platform.value)
+loadQuota()
 
 // 从历史记录"复用"跳转过来时：预填关键词并自动开始生成
 // URL 格式：/?keyword=xxx&platform=小红书&auto=1
@@ -970,6 +995,36 @@ function handleUserCommand(command) {
 
 .input-card {
   margin-bottom: 16px;
+}
+
+/* 今日配额提示条 */
+.quota-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #16a34a;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.quota-tip-warn {
+  color: #dc2626;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.quota-tip-link {
+  color: #22c55e;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.quota-tip-warn .quota-tip-link {
+  color: #dc2626;
 }
 
 .input-row {

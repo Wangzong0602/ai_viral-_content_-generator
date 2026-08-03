@@ -25,7 +25,7 @@ from app.db.session import get_db
 from app.models.image_record import ImageRecord
 from app.models.user import User
 from app.schemas.image import ImageGenerateRequest, ImageGenerateResponse, ImageOut
-from app.services import image_service
+from app.services import image_service, quota_service
 
 router = APIRouter(prefix="/api/v1/content/images", tags=["AI 配图"])
 
@@ -103,6 +103,11 @@ async def generate_images(
         "用户 %s 请求配图: count=%d style=%s operation=%s task_id=%s",
         current_user.id, data.count, data.style, data.operation, data.task_id,
     )
+
+    # 权益配额：AI 配图按"张"计费（免费版 0 张 = 功能未开放，直接被拒）
+    # regenerate（换一张）只生成 1 张，所以固定扣 1
+    need_count = data.count if data.operation == "generate" else 1
+    quota_service.consume_quota(db, current_user, "image", need_count)
 
     if data.operation == "generate":
         # 常规生成：语义分析 + 并发生成

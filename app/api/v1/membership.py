@@ -25,8 +25,9 @@ from app.schemas.membership import (
     OrderOut,
     PayResultOut,
     PlanOut,
+    QuotaUsageOut,
 )
-from app.services import membership_service
+from app.services import membership_service, quota_service
 
 router = APIRouter(prefix="/api/v1/membership", tags=["会员中心"])
 
@@ -54,6 +55,20 @@ def my_membership(
     前端"会员中心"页顶部展示；免费用户返回内置免费版。
     """
     return MembershipOut(**membership_service.get_user_membership(db, current_user.id))
+
+
+@router.get("/quota", response_model=QuotaUsageOut, summary="今日权益用量")
+def my_quota(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> QuotaUsageOut:
+    """
+    查询今日各功能用量（已用/上限/剩余），前端展示剩余次数。
+
+    结构见 QuotaUsageOut：article/analyze/image/batch 四个动作，
+    值为 -1 表示不限，batch 的 limit 表示单次篇数上限。
+    """
+    return QuotaUsageOut(**quota_service.get_daily_usage(db, current_user))
 
 
 @router.post("/orders", response_model=OrderOut, summary="创建订单")

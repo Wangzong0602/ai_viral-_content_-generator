@@ -56,6 +56,25 @@
         </div>
       </el-card>
 
+      <!-- ========== 今日权益用量 ========== -->
+      <el-card class="quota-card" shadow="never">
+        <div class="quota-title">📊 今日用量（每日 0 点重置）</div>
+        <div class="quota-grid">
+          <div v-for="item in quotaItems" :key="item.key" class="quota-item">
+            <div class="quota-label">{{ item.label }}</div>
+            <div class="quota-value">
+              <template v-if="item.remaining === -1">不限</template>
+              <template v-else>
+                <span :class="{ 'quota-warn': item.remaining === 0, 'quota-ok': item.remaining > 0 }">
+                  {{ item.used }}/{{ item.limit }}
+                </span>
+                <span class="quota-remain">剩余 {{ item.remaining }}</span>
+              </template>
+            </div>
+          </div>
+        </div>
+      </el-card>
+
       <!-- ========== 套餐列表 ========== -->
       <div ref="plansRef" class="plans-section">
         <h3 class="section-title">选择套餐</h3>
@@ -183,6 +202,7 @@ import {
   getMyMembershipApi,
   getMyOrdersApi,
   getPlansApi,
+  getMyQuotaApi,
   payOrderApi,
 } from '../api/membership'
 
@@ -194,9 +214,22 @@ const userStore = useUserStore()
 const plans = ref([]) // 套餐列表
 const membership = ref({ plan: { code: 'free', name: '免费版' }, is_active: false, end_date: null, days_left: 0 })
 const orders = ref([]) // 我的订单
+const quota = ref({}) // 今日权益用量
 const loadingOrders = ref(false)
 const buyingPlan = ref(null) // 正在发起购买的套餐 code
 const plansRef = ref(null)
+
+// 今日用量面板数据（从 /quota 响应映射成展示项）
+const quotaItems = computed(() => {
+  const q = quota.value
+  const defs = [
+    { key: 'article', label: '文章生成' },
+    { key: 'analyze', label: '爆文分析' },
+    { key: 'image', label: 'AI 配图' },
+    { key: 'batch', label: '批量生成(单次上限)' },
+  ]
+  return defs.map((d) => ({ ...d, ...(q[d.key] || { used: 0, limit: 0, remaining: 0 }) }))
+})
 
 // 支付弹窗
 const payDialogVisible = ref(false)
@@ -257,14 +290,16 @@ function orderStatusType(s) {
 // ---------- 数据加载 ----------
 async function loadData() {
   try {
-    const [plansRes, meRes, ordersRes] = await Promise.all([
+    const [plansRes, meRes, ordersRes, quotaRes] = await Promise.all([
       getPlansApi(),
       getMyMembershipApi(),
       getMyOrdersApi(),
+      getMyQuotaApi(),
     ])
     plans.value = plansRes
     membership.value = meRes
     orders.value = ordersRes
+    quota.value = quotaRes
   } catch (e) {
     ElMessage.error('会员信息加载失败')
   }
@@ -428,6 +463,59 @@ onMounted(loadData)
   margin-top: 4px;
 }
 
+/* 今日用量 */
+.quota-card {
+  margin-bottom: 8px;
+}
+
+.quota-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 12px;
+}
+
+.quota-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.quota-item {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.quota-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.quota-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.quota-ok {
+  color: #16a34a;
+}
+
+.quota-warn {
+  color: #dc2626;
+}
+
+.quota-remain {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
 /* 套餐区域 */
 .section-title {
   font-size: 18px;
@@ -581,6 +669,9 @@ onMounted(loadData)
 @media (max-width: 900px) {
   .plans-grid {
     grid-template-columns: 1fr;
+  }
+  .quota-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

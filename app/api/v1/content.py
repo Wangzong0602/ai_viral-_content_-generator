@@ -49,7 +49,7 @@ from app.schemas.content import (
     TopicsOut,
 )
 from app.schemas.user import MessageOut
-from app.services import adapt_service, analyze_service, content_service
+from app.services import adapt_service, analyze_service, content_service, quota_service
 
 router = APIRouter(prefix="/api/v1/content", tags=["内容创作"])
 
@@ -78,6 +78,9 @@ def generate_topics(
     前端拿到列表后展示给用户，用户点选一个再触发"完整创作"。
     """
     data.validate_platform()  # 校验平台是否支持
+    # 权益配额：生成选题 = 1 次文章创作（在调用 AI 前扣，防止刷选题烧钱）
+    # 注意：generate（第二步）只校验不扣，因为选题已扣过（见 generate 接口注释）
+    quota_service.consume_quota(db, current_user, "article", 1)
     # 模板结构注入（用户选了模板时，让选题贴合模板）
     template_structure = content_service._get_template_structure(db, data.template_id)
     # 方案2：题材敏感时联网搜索真实事实（选题必须基于事实）
@@ -136,6 +139,11 @@ def generate(
         keyword=keyword, platform=platform, selected_title=selected_title
     )
     req.validate_platform()
+
+    # 权益配额：只校验不消耗（generate 是选题的延续，次数在 topics 接口已扣）
+    # 【防绕过】直接调用本接口跳过 topics 的用户在这里被拦截；
+    # 重复调用 generate 不重复扣费（一次选题会话 = 一次创作）
+    quota_service.check_quota(db, current_user, "article", 1)
 
     # 先取一次选题列表（确保 topic 有完整信息：标题/简介/目标人群）
     # 注意：这里不注入模板（选题已在 topics 接口生成时用模板了），保持一致
@@ -312,6 +320,8 @@ async def analyze(
     【async 说明】
     内部包含网络抓取（httpx async）和大模型调用（线程池），不阻塞事件循环。
     """
+    # 权益配额：每次逆向分析消耗 1 次（免费版每天 3 次）
+    quota_service.consume_quota(db, current_user, "analyze", 1)
     result = await analyze_service.analyze_viral_article(data.input_text)
     return AnalyzeResponse(
         title=result["title"],
