@@ -79,6 +79,14 @@
           </el-table-column>
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="selected_title" label="标题" min-width="200" show-overflow-tooltip />
+          <el-table-column label="形态" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.content_type && row.content_type !== 'article'" size="small" type="warning">
+                {{ contentTypeNames[row.content_type] || row.content_type }}
+              </el-tag>
+              <span v-else class="muted-text">图文</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="platform" label="平台" width="90" />
           <el-table-column label="状态" width="90">
             <template #default="{ row }">
@@ -154,6 +162,14 @@ const loading = ref(false)
 // ---------- 筛选状态（历史记录增强） ----------
 const searchKeyword = ref('') // 搜索关键词
 const filterPlatform = ref('') // 平台筛选
+
+// 内容形态中文名（P3 扩展：历史记录形态标签）
+const contentTypeNames = {
+  article: '图文爆文',
+  video_script: '视频脚本',
+  live_script: '直播文案',
+  ecommerce: '电商带货',
+}
 const favoriteOnly = ref(false) // 只看收藏
 const platforms = ['小红书', '公众号', '知乎']
 let searchTimer = null // 搜索防抖定时器
@@ -302,6 +318,12 @@ onMounted(loadTasks)
 <style scoped>
 .history-page {
   min-height: 100vh;
+}
+
+/* 形态列的免费/普通文本样式 */
+.muted-text {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 .header {

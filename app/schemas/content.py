@@ -14,6 +14,21 @@ from pydantic import BaseModel, Field
 # 支持的目标平台列表（新增平台时在这里加，同时需要对应的排版提示词）
 SUPPORTED_PLATFORMS = ["小红书", "公众号", "知乎"]
 
+# 支持的内容形态（P3 扩展：多内容形态）
+# - article      图文爆文（默认，原有形态）
+# - video_script 视频脚本（口播稿 + 分镜表）
+# - live_script  直播文案（开场钩子 + 产品讲解 + 互动 + 逼单）
+# - ecommerce    电商带货文案（痛点 + 卖点 + 信任背书 + 价格锚点 + 行动召唤）
+SUPPORTED_CONTENT_TYPES = ["article", "video_script", "live_script", "ecommerce"]
+
+# 内容形态中文名（前端展示/历史记录标签）
+CONTENT_TYPE_NAMES = {
+    "article": "图文爆文",
+    "video_script": "视频脚本",
+    "live_script": "直播文案",
+    "ecommerce": "电商带货",
+}
+
 
 class CreateRequest(BaseModel):
     """
@@ -29,6 +44,8 @@ class CreateRequest(BaseModel):
     selected_title: str | None = Field(default=None, max_length=500, description="用户选择的选题标题")
     # 内容模板 ID（可选）：选择模板后，把模板结构注入智能体提示词
     template_id: int | None = Field(default=None, description="内容模板 ID（可选）")
+    # 内容形态（P3 扩展）：article/video_script/live_script/ecommerce
+    content_type: str = Field(default="article", description="内容形态（图文/视频脚本/直播文案/电商带货）")
 
     def validate_platform(self) -> None:
         """校验平台是否支持（调用方在路由里手动调用）。"""
@@ -37,6 +54,16 @@ class CreateRequest(BaseModel):
 
             raise BizException(
                 f"不支持的平台：{self.platform}，可选 {SUPPORTED_PLATFORMS}",
+                status_code=422,
+            )
+
+    def validate_content_type(self) -> None:
+        """校验内容形态是否支持（调用方在路由里手动调用）。"""
+        if self.content_type not in SUPPORTED_CONTENT_TYPES:
+            from app.core.exceptions import BizException
+
+            raise BizException(
+                f"不支持的内容形态：{self.content_type}，可选 {SUPPORTED_CONTENT_TYPES}",
                 status_code=422,
             )
 
@@ -67,6 +94,7 @@ class TaskOut(BaseModel):
     id: int
     keyword: str
     platform: str
+    content_type: str = "article"  # 内容形态（P3 扩展）
     selected_title: str
     status: int
     content: str

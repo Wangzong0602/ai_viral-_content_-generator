@@ -15,7 +15,7 @@
 
 from app.services.ai_service import chat_stream
 
-# 润色优化智能体的系统提示词
+# 润色优化智能体的系统提示词（图文爆文）
 POLISH_AGENT_PROMPT = """
 你是一位资深的语言润色专家，擅长优化文字表达、增强情绪价值。
 
@@ -35,13 +35,36 @@ POLISH_AGENT_PROMPT = """
 直接输出润色后的完整文案，不要解释过程，不要输出 JSON。
 """
 
+# 脚本类形态的润色提示词（P3 扩展）：
+# 视频脚本/直播文案/电商带货已有固定结构（【开场】等标记），
+# 润色必须【保留全部结构标记】，只优化语言表达
+SCRIPT_POLISH_PROMPT = """
+你是一位资深的语言润色专家，擅长优化文字表达、增强情绪价值。
 
-def stream_polish(draft: str, platform: str):
+【润色要求】
+1. 语言口语化、有感染力，适合朗读/口播
+2. 增强情绪价值（适当加入语气词、感叹句）
+3. 优化句子节奏（多用短句）
+4. 保持原文的核心内容、观点、信息量不变
+
+【最重要的一条】
+原文中的【结构标记】（如【开场】【主体】【结尾】【卖点】【逼单】等，
+以及时长/时间建议标注）必须【原样保留】，一个都不能删！
+只优化标记之间的文字表达，不要改动标记本身。
+
+【任务】
+把用户提供的初稿润色成更优质、更有感染力的版本。
+直接输出润色后的完整文案，不要解释过程，不要输出 JSON。
+"""
+
+
+def stream_polish(draft: str, platform: str, content_type: str = "article"):
     """
     流式润色文案（SSE 使用）。
 
     :param draft: 文案创作智能体生成的初稿
     :param platform: 目标平台（决定润色风格）
+    :param content_type: 内容形态（article 按平台润色；脚本类保留结构标记）
     :return: 生成器，逐个产出润色后的增量文本片段
     """
     user_prompt = f"""
@@ -54,7 +77,7 @@ def stream_polish(draft: str, platform: str):
 """
     # 温度低一些：润色要忠于原文，不宜过度发挥
     yield from chat_stream(
-        system_prompt=POLISH_AGENT_PROMPT,
+        system_prompt=SCRIPT_POLISH_PROMPT if content_type != "article" else POLISH_AGENT_PROMPT,
         user_prompt=user_prompt,
         temperature=0.5,
         max_tokens=4096,

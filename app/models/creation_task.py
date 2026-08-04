@@ -36,6 +36,8 @@ class CreationTask(Base):
     # ---------- 生成参数 ----------
     keyword: Mapped[str] = mapped_column(String(200), default="")  # 用户输入的关键词/主题
     platform: Mapped[str] = mapped_column(String(20), default="")  # 目标平台
+    # 内容形态（P3 扩展）：article=图文爆文 video_script=视频脚本 live_script=直播文案 ecommerce=电商带货
+    content_type: Mapped[str] = mapped_column(String(20), default="article")
     selected_title: Mapped[str] = mapped_column(String(500), default="")  # 用户最终选择的选题标题
 
     # ---------- 状态与进度 ----------

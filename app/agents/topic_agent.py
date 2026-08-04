@@ -50,7 +50,13 @@ TOPIC_AGENT_PROMPT = """
 """
 
 
-def generate_topics(keyword: str, platform: str, template_structure: str = "", fact_context: str = "") -> list[dict]:
+def generate_topics(
+    keyword: str,
+    platform: str,
+    template_structure: str = "",
+    fact_context: str = "",
+    content_type: str = "article",
+) -> list[dict]:
     """
     生成 5 个爆款选题方向。
 
@@ -58,6 +64,7 @@ def generate_topics(keyword: str, platform: str, template_structure: str = "", f
     :param platform: 目标平台（小红书/公众号/知乎）
     :param template_structure: 内容模板结构要求（可选，注入提示词让选题贴合模板）
     :param fact_context: 联网搜索到的真实事实背景（可选，防虚构）
+    :param content_type: 内容形态（article/video_script/live_script/ecommerce，P3 扩展）
     :return: 选题列表，格式：
         [{"title": "...", "summary": "...", "target_audience": "...", "expected_effect": "..."}]
         解析失败时返回空列表（调用方展示兜底文案）
@@ -68,6 +75,17 @@ def generate_topics(keyword: str, platform: str, template_structure: str = "", f
         template_part = f"""
 【用户选择的模板结构要求】（选题需适合该模板）
 {template_structure}
+"""
+
+    # 内容形态注入（选题需适合该形态：视频脚本选题要有画面感等）
+    content_type_part = ""
+    if content_type != "article":
+        from app.schemas.content import CONTENT_TYPE_NAMES
+
+        content_type_part = f"""
+【内容形态】{CONTENT_TYPE_NAMES.get(content_type, content_type)}
+选题需适合该内容形态（如视频脚本：选题要有可拍摄的画面感；
+直播文案：选题要有可讲解的产品/话题；电商带货：选题要围绕可售卖的商品）。
 """
 
     # 真实事实注入（题材涉及真实事件时生效，选题必须基于事实）
@@ -83,6 +101,7 @@ def generate_topics(keyword: str, platform: str, template_structure: str = "", f
 【用户输入】
 - 关键词：{keyword}
 - 目标平台：{platform}
+{content_type_part}
 {template_part}
 {fact_part}
 请生成 5 个爆款选题方向。

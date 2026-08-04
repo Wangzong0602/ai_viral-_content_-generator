@@ -115,6 +115,7 @@ def content_writer_node(state: CreationState, writer: StreamWriter) -> dict:
     topic = state.get("topic", {})
     logic_report = state.get("logic_report", {})
     platform = state["platform"]
+    content_type = state.get("content_type", "article")
     # 联网搜索到的真实事实背景（方案2：防虚构，创作时必须基于这些事实）
     fact_context = state.get("fact_context", "")
     fact_part = ""
@@ -138,15 +139,15 @@ def content_writer_node(state: CreationState, writer: StreamWriter) -> dict:
 SEO关键词：{logic_report.get('seo_keywords', '')}
 
 【任务】
-直接输出完整的正文初稿（1500字以上），不要 JSON，不要标题列表，
-从正文第一句开始写。要求口语化、有情绪张力、结构完整。
+直接输出完整的{content_type}初稿（1500字以上），不要 JSON，不要标题列表，
+从第一句开始写。要求口语化、有情绪张力、结构完整。
 """
     # 从 ai_service 导入创作提示词（保持提示词与之前一致）
-    from app.agents.content_writer import CONTENT_WRITER_PROMPT
+    from app.agents.content_writer import _get_writer_prompt
 
     parts: list[str] = []  # 收集所有增量片段
     for chunk in chat_stream(
-        system_prompt=CONTENT_WRITER_PROMPT,
+        system_prompt=_get_writer_prompt(content_type),
         user_prompt=user_prompt,
         temperature=0.7,
         max_tokens=4096,
@@ -169,9 +170,10 @@ def polish_agent_node(state: CreationState, writer: StreamWriter) -> dict:
     """
     draft = state.get("draft", "")
     platform = state["platform"]
+    content_type = state.get("content_type", "article")
 
     parts: list[str] = []
-    for chunk in stream_polish(draft, platform):
+    for chunk in stream_polish(draft, platform, content_type):
         writer(chunk)
         parts.append(chunk)
     polished = "".join(parts)
@@ -189,10 +191,16 @@ def layout_agent_node(state: CreationState) -> dict:
     """
     按平台风格排版（小红书加话题标签/公众号小标题/知乎结构分层）。
     排版是确定性工作，一次性调用（无需流式）。
+
+    【多形态支持】
+    - 图文（article）：按平台排版（原有逻辑）
+    - 视频脚本/直播文案/电商带货：排版只做轻量整理（分段空行/结构标记），
+      不做平台风格适配（脚本结构由创作节点保证）
     """
     polished = state.get("polished", "")
     platform = state["platform"]
-    final_content = layout_content(polished, platform)
+    content_type = state.get("content_type", "article")
+    final_content = layout_content(polished, platform, content_type)
     return {"final_content": final_content, "current_step": "layout_agent"}
 
 

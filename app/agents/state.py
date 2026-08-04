@@ -44,6 +44,8 @@ class CreationState(TypedDict):
     # ============ 1. 初始化输入（由 content_service 注入） ============
     keyword: str  # 用户输入的主题/关键词
     platform: str  # 目标平台（小红书/公众号/知乎）
+    # 内容形态（P3 扩展）：article/video_script/live_script/ecommerce
+    content_type: str
     selected_title: str  # 用户选择的选题标题
     topics: list[dict]  # 选题列表（含完整信息：标题/简介/目标人群/预期效果）
     user_id: int  # 当前用户 ID（落库用）

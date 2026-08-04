@@ -3,13 +3,13 @@
 // 生成流程用浏览器原生 EventSource 实现（见 Workspace.vue）
 import request from '../utils/request'
 
-// 生成选题：输入关键词 + 平台，返回 5 个选题（templateId 可选）
+// 生成选题：输入关键词 + 平台，返回 5 个选题（templateId 可选，contentType 内容形态 P3 扩展）
 // 注意：事实敏感题材（获奖/人名/新闻等）会先联网搜索再生成选题，耗时可达 20-40 秒，
 // 必须单独设置长超时（默认 axios 30 秒不够）
-export function generateTopics(keyword, platform, templateId = null) {
+export function generateTopics(keyword, platform, templateId = null, contentType = 'article') {
   return request.post(
     '/api/v1/content/topics',
-    { keyword, platform, template_id: templateId },
+    { keyword, platform, template_id: templateId, content_type: contentType },
     { timeout: 120000 } // 120 秒：给足联网搜索 + 生成时间
   )
 }

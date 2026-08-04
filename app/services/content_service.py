@@ -53,7 +53,13 @@ NODE_NAMES = {
 }
 
 
-def get_topics(keyword: str, platform: str, template_structure: str = "", fact_context: str = "") -> dict:
+def get_topics(
+    keyword: str,
+    platform: str,
+    template_structure: str = "",
+    fact_context: str = "",
+    content_type: str = "article",
+) -> dict:
     """
     第一步：根据关键词生成 5 个爆款选题。
 
@@ -64,8 +70,11 @@ def get_topics(keyword: str, platform: str, template_structure: str = "", fact_c
     :param platform: 目标平台
     :param template_structure: 内容模板结构要求（可选）
     :param fact_context: 联网搜索到的真实事实背景（可选，防虚构）
+    :param content_type: 内容形态（P3 扩展：视频脚本/直播文案/电商带货）
     """
-    topics = topic_agent.generate_topics(keyword, platform, template_structure, fact_context)
+    topics = topic_agent.generate_topics(
+        keyword, platform, template_structure, fact_context, content_type
+    )
     return {"keyword": keyword, "platform": platform, "topics": topics}
 
 
@@ -149,6 +158,7 @@ def stream_generate(
     selected_title: str,
     topics: list[dict],
     template_id: int | None = None,
+    content_type: str = "article",
 ):
     """
     完整创作流水线（生成器）：LangGraph 状态机执行 + SSE 事件输出。
@@ -169,6 +179,7 @@ def stream_generate(
         user_id=user_id,
         keyword=keyword,
         platform=platform,
+        content_type=content_type,  # 内容形态（P3 扩展）
         selected_title=selected_title,
         status=1,  # 生成中
         current_step="init",
@@ -180,8 +191,10 @@ def stream_generate(
     # thread_id：每个任务一个唯一会话 ID（检查点隔离 + 断点续跑基础）
     config = {"configurable": {"thread_id": f"task-{task.id}"}}
 
-    # 模板结构注入（用户选了模板时生效）
-    template_structure = _get_template_structure(db, template_id)
+    # 模板结构注入（用户选了模板时生效；脚本类形态不适用模板）
+    template_structure = (
+        _get_template_structure(db, template_id) if content_type == "article" else ""
+    )
 
     # 方案2：题材敏感时，联网搜索真实事实（创作前注入，防虚构）
     fact_context = search_facts(keyword)
@@ -190,6 +203,7 @@ def stream_generate(
     initial_state = {
         "keyword": keyword,
         "platform": platform,
+        "content_type": content_type,  # 内容形态（P3 扩展）
         "selected_title": selected_title,
         "topics": topics,
         "user_id": user_id,

@@ -49,6 +49,9 @@
             :disabled="generating"
             @keyup.enter="startGenerate"
           />
+          <el-select v-model="contentType" size="large" style="width: 150px" :disabled="generating" @change="onContentTypeChange">
+            <el-option v-for="(label, val) in contentTypes" :key="val" :label="label" :value="val" />
+          </el-select>
           <el-select v-model="platform" size="large" style="width: 150px" :disabled="generating">
             <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
           </el-select>
@@ -56,9 +59,12 @@
             {{ generateBtnText }}
           </el-button>
         </div>
+        <div class="content-type-hint">
+          {{ contentTypeHint }}
+        </div>
 
-        <!-- 多平台生成选项（首屏可见，生成前就能决定） -->
-        <div class="multi-platform-row">
+        <!-- 多平台生成选项（仅图文形态；脚本/直播/带货形态不支持一键多平台） -->
+        <div v-if="contentType === 'article'" class="multi-platform-row">
           <span class="multi-platform-label">📦 同时生成以下平台版本：</span>
           <el-checkbox-group v-model="multiPlatforms" :disabled="generating">
             <el-checkbox v-for="p in platforms" :key="p" :value="p" :disabled="p === platform">
@@ -71,8 +77,8 @@
           <span v-else class="multi-platform-hint">不选择则只生成 {{ platform }} 单篇</span>
         </div>
 
-        <!-- 内容模板选择（可选，按当前平台联动过滤） -->
-        <div class="template-row">
+        <!-- 内容模板选择（仅图文形态可用） -->
+        <div v-if="contentType === 'article'" class="template-row">
           <span class="template-label">📋 内容模板：</span>
           <el-select
             v-model="selectedTemplateId"
@@ -162,7 +168,12 @@
       <el-card v-show="phase === 'result'" class="result-card">
         <template #header>
           <div class="result-header">
-            <span>创作完成</span>
+            <span>
+              创作完成
+              <el-tag v-if="contentType !== 'article'" size="small" type="warning" style="margin-left: 8px">
+                {{ contentTypes[contentType] }}
+              </el-tag>
+            </span>
             <div class="result-actions">
               <el-button size="small" @click="copyContent">📋 一键复制</el-button>
               <el-button size="small" type="primary" @click="exportMarkdown">⬇️ 导出 Markdown</el-button>
@@ -398,10 +409,37 @@ const userStore = useUserStore()
 
 // ---------- 状态 ----------
 const platforms = ['小红书', '公众号', '知乎']
+// 内容形态（P3 扩展：多内容形态）
+const contentTypes = {
+  article: '图文爆文',
+  video_script: '视频脚本',
+  live_script: '直播文案',
+  ecommerce: '电商带货',
+}
 const keyword = ref('')
 const platform = ref('小红书')
+const contentType = ref('article') // 当前内容形态（默认图文）
 // 首屏多平台选项：生成前选择"同时生成哪些平台版本"（排除主平台本身）
 const multiPlatforms = ref([])
+
+// 形态切换时的提示文案（说明各形态产出什么）
+const contentTypeHint = computed(() => {
+  const hints = {
+    article: '',
+    video_script: '🎬 视频脚本：口播稿 + 分镜结构（开场钩子/主体/结尾，附时长建议）',
+    live_script: '📺 直播文案：开场留人 + 产品讲解 + 互动环节 + 逼单成交',
+    ecommerce: '🛒 电商带货：痛点 + 卖点 + 信任背书 + 价格锚点 + 行动召唤',
+  }
+  return hints[contentType.value] || ''
+})
+
+// 切换形态时：非图文形态清空多平台选择（该形态不支持一键多平台）
+function onContentTypeChange() {
+  if (contentType.value !== 'article') {
+    multiPlatforms.value = []
+    selectedTemplateId.value = null
+  }
+}
 
 // 今日权益配额（顶部提示：剩余生成次数）
 const todayQuota = ref(null) // null=未加载
@@ -439,10 +477,15 @@ async function checkMembershipExpiry() {
   }
 }
 
-// 生成按钮文案：根据是否选多平台动态变化
-const generateBtnText = computed(() =>
-  multiPlatforms.value.length ? `🚀 一键生成 ${multiPlatforms.value.length + 1} 平台爆文` : '🚀 一键生成爆文'
-)
+// 生成按钮文案：根据是否选多平台/内容形态动态变化
+const generateBtnText = computed(() => {
+  if (contentType.value !== 'article') {
+    return `🚀 一键生成${contentTypes[contentType.value]}`
+  }
+  return multiPlatforms.value.length
+    ? `🚀 一键生成 ${multiPlatforms.value.length + 1} 平台爆文`
+    : '🚀 一键生成爆文'
+})
 
 // 主平台切换时：如果新主平台已在多平台列表里，自动移除（避免重复生成同一平台）
 watch(platform, (newVal) => {
@@ -593,8 +636,13 @@ async function startGenerate() {
   }
   loadingTopics.value = true
   try {
-    // 第一步：生成选题
-    const data = await generateTopics(keyword.value.trim(), platform.value, selectedTemplateId.value)
+    // 第一步：生成选题（携带内容形态）
+    const data = await generateTopics(
+      keyword.value.trim(),
+      platform.value,
+      selectedTemplateId.value,
+      contentType.value
+    )
     topics.value = data.topics || []
     if (!topics.value.length) {
       ElMessage.error('选题生成失败，请重试')
@@ -628,6 +676,7 @@ function startStreamGeneration() {
     platform: platform.value,
     selected_title: selectedTopic.value.title,
     token: token,
+    content_type: contentType.value, // 内容形态（P3 扩展）
   })
   // 模板 ID（可选，注入创作流程）
   if (selectedTemplateId.value) {
@@ -1061,6 +1110,13 @@ function handleUserCommand(command) {
   background: #f5f9ff;
   border: 1px dashed #a0cfff;
   border-radius: 8px;
+}
+
+/* 内容形态提示文案 */
+.content-type-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
 }
 
 .multi-platform-label {

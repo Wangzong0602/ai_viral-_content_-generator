@@ -78,6 +78,7 @@ def generate_topics(
     前端拿到列表后展示给用户，用户点选一个再触发"完整创作"。
     """
     data.validate_platform()  # 校验平台是否支持
+    data.validate_content_type()  # 校验内容形态是否支持（P3 扩展）
     # 权益配额：生成选题 = 1 次文章创作（在调用 AI 前扣，防止刷选题烧钱）
     # 注意：generate（第二步）只校验不扣，因为选题已扣过（见 generate 接口注释）
     quota_service.consume_quota(db, current_user, "article", 1)
@@ -85,7 +86,13 @@ def generate_topics(
     template_structure = content_service._get_template_structure(db, data.template_id)
     # 方案2：题材敏感时联网搜索真实事实（选题必须基于事实）
     fact_context = content_service.search_facts(data.keyword)
-    result = content_service.get_topics(data.keyword, data.platform, template_structure, fact_context)
+    result = content_service.get_topics(
+        data.keyword,
+        data.platform,
+        template_structure,
+        fact_context,
+        content_type=data.content_type,
+    )
     if not result["topics"]:
         # 模型解析失败等异常情况：给前端明确提示而不是空列表
         raise HTTPException(
@@ -102,6 +109,7 @@ def generate(
     selected_title: str = Query(..., description="用户选择的选题标题"),
     token: str = Query(..., description="JWT 令牌（EventSource 无法带请求头，用 URL 参数）"),
     template_id: int | None = Query(default=None, description="内容模板 ID（可选）"),
+    content_type: str = Query(default="article", description="内容形态（P3 扩展）"),
     db: Session = Depends(get_db),
 ):
     """
@@ -136,9 +144,13 @@ def generate(
 
     # 校验平台 + 手动构造完整请求对象（get_topics 需要）
     req = CreateRequest(
-        keyword=keyword, platform=platform, selected_title=selected_title
+        keyword=keyword,
+        platform=platform,
+        selected_title=selected_title,
+        content_type=content_type,
     )
     req.validate_platform()
+    req.validate_content_type()  # 校验内容形态（P3 扩展）
 
     # 权益配额：只校验不消耗（generate 是选题的延续，次数在 topics 接口已扣）
     # 【防绕过】直接调用本接口跳过 topics 的用户在这里被拦截；
@@ -147,7 +159,7 @@ def generate(
 
     # 先取一次选题列表（确保 topic 有完整信息：标题/简介/目标人群）
     # 注意：这里不注入模板（选题已在 topics 接口生成时用模板了），保持一致
-    topics_result = content_service.get_topics(keyword, platform)
+    topics_result = content_service.get_topics(keyword, platform, content_type=content_type)
     topics = topics_result["topics"]
     if not topics:
         raise HTTPException(status_code=502, detail="选题生成失败，请重试")
@@ -166,6 +178,7 @@ def generate(
             selected_title=selected_title,
             topics=topics,
             template_id=template_id,  # 模板结构注入（逻辑分析/创作节点）
+            content_type=content_type,  # 内容形态（P3 扩展）
         ):
             event = item["event"]
             data = item["data"]

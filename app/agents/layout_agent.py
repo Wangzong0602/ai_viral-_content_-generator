@@ -19,7 +19,7 @@ MVP 阶段先用"规则 + 简单 AI 辅助"：规则负责确定性的部分
 
 from app.services.ai_service import chat
 
-# 排版整合智能体的系统提示词
+# 排版整合智能体的系统提示词（图文爆文）
 LAYOUT_AGENT_PROMPT = """
 你是一位新媒体排版专家，擅长把文章排版成符合平台规范的形式。
 
@@ -37,15 +37,47 @@ LAYOUT_AGENT_PROMPT = """
 直接输出排版后的完整文案，不要解释过程，不要输出 JSON。
 """
 
+# 非图文形态的排版提示词（P3 扩展）：
+# 脚本/直播/带货文案的结构由创作节点保证，排版只做轻量整理，
+# 不追加话题标签（脚本发布时标签由用户自行决定）
+SCRIPT_LAYOUT_PROMPT = """
+你是一位内容排版助手，负责把创作脚本整理成易读的发布稿。
 
-def layout_content(content: str, platform: str) -> str:
+【任务】
+1. 保持原文内容一字不改（不要删减、不要改写、不要总结）
+2. 只做轻量整理：统一空行分段、把已有结构标记（如【开场】）排版清晰
+3. 不要追加话题标签、不要加 Emoji
+
+直接输出整理后的完整内容，不要解释过程，不要输出 JSON。
+"""
+
+
+def layout_content(content: str, platform: str, content_type: str = "article") -> str:
     """
-    对润色后的文案进行平台风格排版（一次性调用）。
+    对润色后的文案进行排版（一次性调用）。
 
     :param content: 润色后的文案
     :param platform: 目标平台（小红书/公众号/知乎）
+    :param content_type: 内容形态（article 按平台排版，脚本类只做轻量整理）
     :return: 排版后的最终文案
     """
+    # 脚本/直播/带货形态：结构已定，只做轻量整理，避免 AI 乱改脚本
+    if content_type != "article":
+        user_prompt = f"""
+【内容形态】{content_type}
+
+【文案】
+{content}
+
+请整理排版后输出。
+"""
+        return chat(
+            system_prompt=SCRIPT_LAYOUT_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.2,
+            max_tokens=4096,
+        )
+
     user_prompt = f"""
 【目标平台】{platform}
 
