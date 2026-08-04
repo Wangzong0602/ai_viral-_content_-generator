@@ -221,6 +221,30 @@
           </div>
         </div>
 
+        <!-- SEO 优化报告（独立 SEO 智能体：关键词/话题标签/优化标题，仅图文形态） -->
+        <div v-if="seoInfo && seoInfo.keywords?.length" class="seo-report">
+          <div class="seo-row">
+            <span class="seo-label">🔍 优化标题：</span>
+            <span v-if="seoInfo.optimized_title" class="seo-value">{{ seoInfo.optimized_title }}</span>
+          </div>
+          <div class="seo-row">
+            <span class="seo-label">关键词：</span>
+            <el-tag v-for="kw in seoInfo.keywords" :key="kw" size="small" class="seo-tag" type="info">
+              {{ kw }}
+            </el-tag>
+          </div>
+          <div v-if="seoInfo.hashtags?.length" class="seo-row">
+            <span class="seo-label">话题标签：</span>
+            <el-tag v-for="tag in seoInfo.hashtags" :key="tag" size="small" class="seo-tag" type="warning">
+              {{ tag }}
+            </el-tag>
+          </div>
+          <div v-if="seoInfo.meta_description" class="seo-row">
+            <span class="seo-label">搜索描述：</span>
+            <span class="seo-value seo-meta">{{ seoInfo.meta_description }}</span>
+          </div>
+        </div>
+
         <!-- AI 配图区 -->
         <div class="image-section">
           <div class="image-toolbar">
@@ -552,6 +576,8 @@ const qualityReport = ref(null)
 const qualityScore = ref(0)
 // 事实核查报告（方案1）：{ checked, risk_level, claims, warning }
 const factCheck = ref(null)
+// SEO 优化报告（独立 SEO 智能体产出：关键词/话题标签/优化标题，仅图文形态）
+const seoInfo = ref(null)
 
 // AI 配图状态
 const images = ref([]) // 配图列表 [{ url, scene, regenerating }]
@@ -723,6 +749,7 @@ function startStreamGeneration() {
     qualityReport.value = data.sensitive_report
     qualityScore.value = data.quality_score
     factCheck.value = data.fact_check || null // 事实核查报告（方案1）
+    seoInfo.value = data.seo || null // SEO 优化报告（关键词/标签，仅图文）
     currentTaskId.value = data.task_id // 保存任务 ID（配图落库关联用）
     generating.value = false
     streaming.value = false
@@ -1392,6 +1419,44 @@ function handleUserCommand(command) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* SEO 优化报告 */
+.seo-report {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+}
+
+.seo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.seo-label {
+  font-weight: 600;
+  color: #0369a1;
+  flex-shrink: 0;
+}
+
+.seo-value {
+  color: #374151;
+}
+
+.seo-meta {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.seo-tag {
+  margin-right: 4px;
 }
 
 .fact-claim {

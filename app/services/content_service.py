@@ -47,6 +47,7 @@ NODE_NAMES = {
     "logic_analyzer": "爆文逻辑分析",
     "content_writer": "文案创作",
     "polish_agent": "润色优化",
+    "seo_agent": "SEO 优化",
     "layout_agent": "排版整合",
     "quality_checker": "质量审核",
     "revise": "敏感词重写",
@@ -251,6 +252,8 @@ def stream_generate(
         retries = final_state.get("retry_count", 0)
         # 方案1：事实核查报告（可能为空）
         fact_check = final_state.get("fact_check_report", {})
+        # SEO 优化报告（仅图文形态有；脚本类为空）
+        seo_result = final_state.get("seo_result", {})
 
         task.status = 2  # 已完成
         task.content = content
@@ -261,7 +264,7 @@ def stream_generate(
         db.commit()
         db.refresh(task)
 
-        # 完成事件：带最终结果（前端渲染全文 + 事实核查警告）
+        # 完成事件：带最终结果（前端渲染全文 + 事实核查警告 + SEO 标签）
         yield {
             "event": "complete",
             "data": {
@@ -272,6 +275,7 @@ def stream_generate(
                 "quality_score": score,
                 "retry_count": retries,
                 "fact_check": fact_check,  # 事实核查报告（前端展示警告条）
+                "seo": seo_result,  # SEO 报告（前端展示关键词/标签）
             },
         }
 

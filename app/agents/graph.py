@@ -41,11 +41,24 @@ from app.agents.nodes import (
     quality_checker_node,
     resolve_topic_node,
     revise_node,
+    seo_agent_node,
 )
 from app.agents.state import NODE_RETRY_POLICY, CreationState
 
 # 敏感词重试上限：同一篇文案最多重写几次（防止无限循环烧钱）
 MAX_QUALITY_RETRIES = 2
+
+
+def _should_run_seo(state: CreationState) -> str:
+    """
+    润色完成后的条件路由：是否执行 SEO 优化。
+
+    - article（图文）→ seo_agent：图文有搜索场景，需要关键词/标签优化
+    - 脚本/直播/带货 → layout_agent：无搜索场景，跳过 SEO 直接排版
+    """
+    if state.get("content_type", "article") == "article":
+        return "seo_agent"
+    return "layout_agent"
 
 # 检查点数据库文件路径（项目根目录 /data/checkpoints.sqlite）
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
@@ -102,6 +115,7 @@ def build_graph() -> StateGraph:
     workflow.add_node("logic_analyzer", logic_analyzer_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("content_writer", content_writer_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("polish_agent", polish_agent_node, retry=NODE_RETRY_POLICY)
+    workflow.add_node("seo_agent", seo_agent_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("layout_agent", layout_agent_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("quality_checker", quality_checker_node, retry=NODE_RETRY_POLICY)
     workflow.add_node("fact_checker", fact_checker_node, retry=NODE_RETRY_POLICY)
@@ -112,7 +126,16 @@ def build_graph() -> StateGraph:
     workflow.add_edge("resolve_topic", "logic_analyzer")
     workflow.add_edge("logic_analyzer", "content_writer")
     workflow.add_edge("content_writer", "polish_agent")
-    workflow.add_edge("polish_agent", "layout_agent")
+    # 润色后条件路由：图文 → SEO 优化；脚本类形态 → 直接排版（无搜索场景）
+    workflow.add_conditional_edges(
+        "polish_agent",
+        _should_run_seo,
+        {
+            "seo_agent": "seo_agent",
+            "layout_agent": "layout_agent",
+        },
+    )
+    workflow.add_edge("seo_agent", "layout_agent")
     workflow.add_edge("layout_agent", "quality_checker")
 
     # ---------- 5. 条件边（质量审核闭环） ----------

@@ -60,6 +60,9 @@ class CreationState(TypedDict):
     logic_report: dict  # 爆文逻辑分析报告（logic_analyzer 节点产出）
     draft: str  # 文案初稿（content_writer 节点产出）
     polished: str  # 润色后文案（polish_agent 节点产出）
+    # SEO 优化报告（seo_agent 节点产出，仅图文形态）：
+    # {"content", "keywords", "hashtags", "meta_description", "optimized_title"}
+    seo_result: NotRequired[dict]
     final_content: str  # 最终排版后文案（layout_agent 节点产出）
 
     # 质量检查结果

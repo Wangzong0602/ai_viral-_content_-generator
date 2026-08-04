@@ -188,6 +188,41 @@ def polish_agent_node(state: CreationState, writer: StreamWriter) -> dict:
 
 
 # ============================================================
+# 节点 4.5：SEO 优化（seo_agent）
+# ============================================================
+def seo_agent_node(state: CreationState) -> dict:
+    """
+    SEO 优化：关键词密度 + 话题标签 + 标题优化（需求文档 6.2 智能体 5）。
+
+    【为什么是独立节点而不是合并进润色/排版？】
+    需求文档明确了 8 个智能体的分工（SEO 是第 5 个），
+    独立节点让"搜索优化"职责单一、可单独替换/升级；
+    图的条件边保证只有图文形态走 SEO（脚本类跳过）。
+
+    【兜底策略】SEO 结果异常变短 → 退回润色稿（信息量优先）。
+    """
+    from app.agents.seo_agent import optimize_seo
+
+    polished = state.get("polished", "")
+    platform = state["platform"]
+    title = state.get("topic", {}).get("title", state.get("selected_title", ""))
+
+    result = optimize_seo(polished, platform, title)
+    seo_content = result.get("content", "") or polished
+
+    # 兜底：SEO 改写把内容弄丢了 → 退回润色稿
+    if len(seo_content) < len(polished) * 0.5:
+        seo_content = polished
+
+    return {
+        # 覆盖 polished：排版节点读取的仍是 polished 字段，无需改 layout
+        "polished": seo_content,
+        "seo_result": result,
+        "current_step": "seo_agent",
+    }
+
+
+# ============================================================
 # 节点 5：排版整合（layout_agent）
 # ============================================================
 def layout_agent_node(state: CreationState) -> dict:
