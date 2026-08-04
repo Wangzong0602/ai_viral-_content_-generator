@@ -11,7 +11,7 @@ class TestTemplateService:
         template_service.init_seed_templates(db)
         template_service.init_seed_templates(db)
         templates = template_service.get_templates(db)
-        assert len(templates) == 9  # 3 平台 × 3 结构
+        assert len(templates) == 18  # 6 平台 × 3 结构（P3 扩展：新增 B站/快手/视频号）
 
     def test_filter_by_platform(self, db):
         """按平台过滤模板。"""

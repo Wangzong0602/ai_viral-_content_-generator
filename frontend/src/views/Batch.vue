@@ -159,7 +159,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-const platforms = ['小红书', '公众号', '知乎']
+const platforms = ['小红书', '公众号', '知乎', 'B站', '快手', '视频号']
 
 // 创建表单
 const batchName = ref('')

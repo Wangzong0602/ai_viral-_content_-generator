@@ -415,7 +415,7 @@ const router = useRouter()
 const userStore = useUserStore()
 
 // ---------- 状态 ----------
-const platforms = ['小红书', '公众号', '知乎']
+const platforms = ['小红书', '公众号', '知乎', 'B站', '快手', '视频号']
 // 内容形态（P3 扩展：多内容形态）
 const contentTypes = {
   article: '图文爆文',

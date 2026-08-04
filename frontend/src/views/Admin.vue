@@ -400,7 +400,7 @@ const menus = [
   { key: 'orders', label: '订单管理', icon: '🧾' },
 ]
 const activeMenu = ref('stats')
-const platforms = ['小红书', '公众号', '知乎']
+const platforms = ['小红书', '公众号', '知乎', 'B站', '快手', '视频号']
 
 const avatarText = computed(() => (userStore.nickname || '用').charAt(0))
 

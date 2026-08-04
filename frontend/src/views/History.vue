@@ -171,7 +171,7 @@ const contentTypeNames = {
   ecommerce: '电商带货',
 }
 const favoriteOnly = ref(false) // 只看收藏
-const platforms = ['小红书', '公众号', '知乎']
+const platforms = ['小红书', '公众号', '知乎', 'B站', '快手', '视频号']
 let searchTimer = null // 搜索防抖定时器
 
 // 是否有筛选条件（空状态提示 + 清除按钮显示）

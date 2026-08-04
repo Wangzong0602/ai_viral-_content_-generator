@@ -12,7 +12,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 # 支持的目标平台列表（新增平台时在这里加，同时需要对应的排版提示词）
-SUPPORTED_PLATFORMS = ["小红书", "公众号", "知乎"]
+# P3 扩展：新增 B站/快手/视频号（2026-08-04）
+SUPPORTED_PLATFORMS = ["小红书", "公众号", "知乎", "B站", "快手", "视频号"]
 
 # 支持的内容形态（P3 扩展：多内容形态）
 # - article      图文爆文（默认，原有形态）
