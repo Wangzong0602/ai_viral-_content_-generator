@@ -105,11 +105,13 @@ def _build_user_prompt(
     topic: dict, logic_report: dict, platform: str, content_type: str = "article"
 ) -> str:
     """组装文案创作的用户提示词（把选题和逻辑报告嵌入进去）。"""
+    # 非图文形态：不注入平台（避免平台机制污染形态输出）
+    scenario = f"【目标平台】{platform}" if content_type == "article" else "【内容形态创作】"
     return f"""
 【选题信息】
 - 标题：{topic.get('title', '')}
 - 简介：{topic.get('summary', '')}
-- 目标平台：{platform}
+{scenario}
 
 【爆文逻辑报告】
 标题钩子：{logic_report.get('title_hook', '')}
@@ -161,11 +163,13 @@ def stream_draft(
     content_type 决定创作提示词（视频脚本/直播文案/电商带货），
     输出结构也随之变化（分镜/分段/卖点结构）。
     """
+    # 非图文形态：不注入平台（避免平台机制污染形态输出）
+    scenario = f"【目标平台】{platform}" if content_type == "article" else "【内容形态创作】"
     user_prompt = f"""
 【选题信息】
 - 标题：{topic.get('title', '')}
 - 简介：{topic.get('summary', '')}
-- 目标平台：{platform}
+{scenario}
 
 【爆文逻辑报告】
 标题钩子：{logic_report.get('title_hook', '')}

@@ -82,9 +82,10 @@ def logic_analyzer_node(state: CreationState) -> dict:
     """
     topic = state.get("topic", {})
     platform = state["platform"]
+    content_type = state.get("content_type", "article")
     # 模板结构注入（用户选了模板时生效，让逻辑分析贴合模板）
     template_structure = state.get("template_structure", "")
-    report = analyze_logic(topic, platform, template_structure)
+    report = analyze_logic(topic, platform, template_structure, content_type)
     return {
         "logic_report": report,
         "current_step": "logic_analyzer",
@@ -125,11 +126,13 @@ def content_writer_node(state: CreationState, writer: StreamWriter) -> dict:
 {fact_context}
 """
 
+    # 非图文形态：不注入平台（避免平台机制污染形态输出）
+    scenario = f"【目标平台】{platform}" if content_type == "article" else "【内容形态创作】"
     user_prompt = f"""
 【选题信息】
 - 标题：{topic.get('title', '')}
 - 简介：{topic.get('summary', '')}
-- 目标平台：{platform}
+{scenario}
 {fact_part}
 【爆文逻辑报告】
 标题钩子：{logic_report.get('title_hook', '')}

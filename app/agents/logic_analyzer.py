@@ -58,13 +58,19 @@ LOGIC_ANALYZER_PROMPT = """
 """
 
 
-def analyze_logic(topic: dict, platform: str, template_structure: str = "") -> dict:
+def analyze_logic(
+    topic: dict,
+    platform: str,
+    template_structure: str = "",
+    content_type: str = "article",
+) -> dict:
     """
     分析爆文逻辑，输出创作策略报告。
 
     :param topic: 用户选择的选题（含 title/summary/target_audience）
     :param platform: 目标平台
     :param template_structure: 内容模板结构要求（可选，让拆解贴合模板）
+    :param content_type: 内容形态（P3 扩展：非 article 时按形态拆解，不依赖平台）
     :return: 爆文逻辑报告字典（含 title_hook/opening_3s/content_structure/emotion_points/seo_keywords）
     """
     # 模板结构注入
@@ -74,13 +80,28 @@ def analyze_logic(topic: dict, platform: str, template_structure: str = "") -> d
 【用户选择的模板结构要求】（内容结构需遵循该模板）
 {template_structure}
 """
+
+    # 内容形态注入（非 article 时平台机制无意义，按形态拆解内容逻辑）
+    # 这样视频脚本/直播文案/电商带货不会被"小红书机制"带偏，输出更纯正
+    if content_type != "article":
+        from app.schemas.content import CONTENT_TYPE_NAMES
+
+        scenario = f"""
+【内容形态】{CONTENT_TYPE_NAMES.get(content_type, content_type)}
+请按该内容形态的传播逻辑拆解（如视频脚本：前5秒留人、信息密度、
+完播引导；直播文案：留人/讲解/互动/逼单节奏；电商带货：购买决策链路），
+不要套用图文平台推荐机制。
+"""
+    else:
+        scenario = f"【目标平台】{platform}"
+
     user_prompt = f"""
 【用户选题】
 - 标题：{topic.get('title', '')}
 - 简介：{topic.get('summary', '')}
-- 目标平台：{platform}
+{scenario}
 {template_part}
-请拆解这个选题的爆文逻辑，输出创作策略报告。
+请拆解这个选题的传播逻辑，输出创作策略报告。
 """
     text = chat(
         system_prompt=LOGIC_ANALYZER_PROMPT,

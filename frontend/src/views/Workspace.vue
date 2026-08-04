@@ -40,26 +40,33 @@
           {{ quotaRemainText }}
           <router-link to="/membership" class="quota-tip-link">开通会员解锁更多次数 →</router-link>
         </div>
+
+        <!-- 内容形态 Tab（图文与其他形态分离：图文按平台创作，形态创作不依赖平台） -->
+        <el-radio-group v-model="contentType" size="large" class="type-tabs" @change="onContentTypeChange">
+          <el-radio-button value="article">📝 图文爆文</el-radio-button>
+          <el-radio-button value="video_script">🎬 视频脚本</el-radio-button>
+          <el-radio-button value="live_script">📺 直播文案</el-radio-button>
+          <el-radio-button value="ecommerce">🛒 电商带货</el-radio-button>
+        </el-radio-group>
+
         <div class="input-row">
           <el-input
             v-model="keyword"
-            placeholder="输入创作主题或关键词，如：AI工具提升效率、职场成长、健康养生..."
+            :placeholder="contentType === 'article' ? '输入创作主题或关键词，如：AI工具提升效率、职场成长、健康养生...' : typePlaceholder"
             size="large"
             clearable
             :disabled="generating"
             @keyup.enter="startGenerate"
           />
-          <el-select v-model="contentType" size="large" style="width: 150px" :disabled="generating" @change="onContentTypeChange">
-            <el-option v-for="(label, val) in contentTypes" :key="val" :label="label" :value="val" />
-          </el-select>
-          <el-select v-model="platform" size="large" style="width: 150px" :disabled="generating">
+          <!-- 平台选择：仅图文形态需要（形态创作不依赖平台） -->
+          <el-select v-if="contentType === 'article'" v-model="platform" size="large" style="width: 150px" :disabled="generating">
             <el-option v-for="p in platforms" :key="p" :label="p" :value="p" />
           </el-select>
           <el-button type="primary" size="large" :loading="loadingTopics" :disabled="generating" @click="startGenerate">
             {{ generateBtnText }}
           </el-button>
         </div>
-        <div class="content-type-hint">
+        <div v-if="contentTypeHint" class="content-type-hint">
           {{ contentTypeHint }}
         </div>
 
@@ -431,6 +438,16 @@ const contentTypeHint = computed(() => {
     ecommerce: '🛒 电商带货：痛点 + 卖点 + 信任背书 + 价格锚点 + 行动召唤',
   }
   return hints[contentType.value] || ''
+})
+
+// 形态对应的关键词输入占位提示（引导用户按形态输入）
+const typePlaceholder = computed(() => {
+  const ph = {
+    video_script: '输入视频主题，如：5个高效学习技巧、健身新手避坑指南...',
+    live_script: '输入直播主题/商品，如：夏季护肤直播、新款耳机首发...',
+    ecommerce: '输入要卖的商品/品类，如：无线蓝牙耳机、保温杯...',
+  }
+  return ph[contentType.value] || ''
 })
 
 // 切换形态时：非图文形态清空多平台选择（该形态不支持一键多平台）
@@ -1112,7 +1129,11 @@ function handleUserCommand(command) {
   border-radius: 8px;
 }
 
-/* 内容形态提示文案 */
+/* 内容形态 Tab 与提示文案 */
+.type-tabs {
+  margin-bottom: 14px;
+}
+
 .content-type-hint {
   margin-top: 8px;
   font-size: 12px;
