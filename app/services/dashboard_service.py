@@ -80,13 +80,15 @@ def get_overview(db: Session, user_id: int, days: int = 30) -> dict:
         )
         .group_by(func.date(CreationTask.created_at))
     ).all()
-    count_by_date = {r.d: r.cnt for r in rows}
+    # 注意：func.date() 的返回类型依赖数据库（MySQL 返回 date 对象、SQLite 返回字符串），
+    # 统一转成字符串再当字典 key，保证跨数据库一致（否则 .get(day) 会永远查不到）
+    count_by_date = {str(r.d): r.cnt for r in rows}
 
     # 补全缺失日期（无创作的日期填 0，保证折线图连续）
     trend: list[dict] = []
     for i in range(days):
         day = since_date + timedelta(days=i)
-        trend.append({"date": day.isoformat(), "count": count_by_date.get(day, 0)})
+        trend.append({"date": day.isoformat(), "count": count_by_date.get(day.isoformat(), 0)})
 
     # ---------- 3. 平台分布 ----------
     platform_rows = db.execute(

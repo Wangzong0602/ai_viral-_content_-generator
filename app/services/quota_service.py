@@ -29,8 +29,12 @@ from datetime import datetime
 
 from app.core.exceptions import BizException
 from app.models.user import User
-from app.services import membership_service
-from app.services.session import redis_client
+from app.services import membership_service, session
+
+# 通过模块引用访问 Redis 客户端：
+# 写成 session.redis_client 而不是 from ... import redis_client，
+# 是为了测试时能 monkeypatch（from import 会把引用复制走，替换模块变量无效）
+# 注意：下方函数里统一用 session.redis_client 访问
 
 # 配额 key 前缀与过期时间（秒）
 QUOTA_KEY_PREFIX = "quota:"
@@ -104,7 +108,7 @@ def check_quota(db, user: User, action: str, amount: int = 1) -> int:
 
     # 已用次数 = key 当前值（不存在视为 0）
     key = _quota_key(user.id, action, datetime.now().strftime("%Y%m%d"))
-    used = int(redis_client.get(key) or 0)
+    used = int(session.redis_client.get(key) or 0)
     remaining = limit - used
     if remaining < amount:
         raise BizException(
@@ -136,11 +140,11 @@ def consume_quota(db, user: User, action: str, amount: int = 1) -> int:
         )
 
     key = _quota_key(user.id, action, datetime.now().strftime("%Y%m%d"))
-    used = redis_client.incrby(key, amount)  # 原子自增
-    redis_client.expire(key, QUOTA_TTL_SECONDS)  # 刷新兜底过期时间
+    used = session.redis_client.incrby(key, amount)  # 原子自增
+    session.redis_client.expire(key, QUOTA_TTL_SECONDS)  # 刷新兜底过期时间
 
     if used > limit:
-        redis_client.decrby(key, amount)  # 超出 → 回滚，不白扣
+        session.redis_client.decrby(key, amount)  # 超出 → 回滚，不白扣
         raise BizException(
             f"今日{ACTION_NAMES[action]}次数已用完（上限 {limit} 次），"
             f"可前往会员中心升级套餐或等待明天重置",
@@ -172,6 +176,6 @@ def get_daily_usage(db, user: User) -> dict:
         if limit == -1:
             result[action] = {"used": 0, "limit": -1, "remaining": -1}
             continue
-        used = int(redis_client.get(_quota_key(user.id, action, day)) or 0)
+        used = int(session.redis_client.get(_quota_key(user.id, action, day)) or 0)
         result[action] = {"used": used, "limit": limit, "remaining": max(limit - used, 0)}
     return result
