@@ -4,6 +4,11 @@ __pycache__/
 .venv/
 venv/
 
+# 测试产物（pytest 覆盖率、缓存）
+.coverage
+.pytest_cache/
+htmlcov/
+
 # 环境变量（含密钥，禁止提交）
 .env
 
